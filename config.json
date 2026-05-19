@@ -1,0 +1,34 @@
+{
+  "widget": {
+    "side": "right",
+    "opacity": 0.9,
+    "collapse_delay_ms": 500,
+    "theme": "dark",
+    "collapsed_width": 8,
+    "expanded_width": 300,
+    "height": 600,
+    "custom_y": 240
+  },
+  "modules": {
+    "enabled": [
+      "reminder",
+      "todo"
+    ],
+    "order": [
+      "reminder",
+      "todo"
+    ]
+  },
+  "reminders": {
+    "popup_corner": "bottom-right",
+    "snooze_options_minutes": [
+      5,
+      15,
+      30
+    ]
+  },
+  "system": {
+    "start_with_windows": false,
+    "language": "pt-BR"
+  }
+}

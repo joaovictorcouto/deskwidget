@@ -1,0 +1,31 @@
+{
+  "reminders": [
+    {
+      "id": "8d5c8094-68b9-4409-8442-20ce6ed2519f",
+      "title": "teste",
+      "datetime": "2026-05-15T10:15:00",
+      "status": "dismissed",
+      "snoozed_until": null,
+      "fired_at": "2026-05-15T10:15:01.661011",
+      "created_at": "2026-05-15T10:14:48.339041"
+    },
+    {
+      "id": "7bcc5003-ae86-45c6-91fc-dec9eb141bf0",
+      "title": "teste",
+      "datetime": "2026-05-15T11:47:00",
+      "status": "dismissed",
+      "snoozed_until": null,
+      "fired_at": "2026-05-15T11:47:22.633054",
+      "created_at": "2026-05-15T11:46:57.091000"
+    },
+    {
+      "id": "41ea5a1e-3c80-4c93-abd4-40b0c3f2eea4",
+      "title": "testes",
+      "datetime": "2026-05-15T12:08:00",
+      "status": "dismissed",
+      "snoozed_until": null,
+      "fired_at": "2026-05-15T12:08:13.966072",
+      "created_at": "2026-05-15T11:59:38.703817"
+    }
+  ]
+}
