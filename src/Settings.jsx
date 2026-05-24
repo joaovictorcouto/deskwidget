@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Settings as SettingsIcon, Palette, Cpu, Volume2 } from 'lucide-react';
+import { X, Settings as SettingsIcon, Palette, Cpu, Volume2, RotateCcw } from 'lucide-react';
 import { playNotificationSound } from './utils/audio.js';
 
 function Settings() {
@@ -35,7 +35,10 @@ function Settings() {
 
   const handleSave = async () => {
     if (window.api) {
+      // Chaves gerenciadas externamente (ex: positioner) — nunca sobrescrever via handleSave
+      const EXCLUDED_KEYS = ['popupMarginRight', 'popupMarginBottom'];
       for (const key of Object.keys(localSettings)) {
+        if (EXCLUDED_KEYS.includes(key)) continue;
         if (localSettings[key] !== settings[key]) {
           await window.api.updateSetting(key, localSettings[key]);
         }
@@ -49,8 +52,17 @@ function Settings() {
   };
 
   const resetDefaults = async () => {
-    if (window.api) {
+    if (window.confirm('Tem certeza que deseja restaurar todas as configurações para o padrão?')) {
       await window.api.resetSettings();
+      const s = await window.api.getSettings();
+      setSettings(s);
+      setLocalSettings(s);
+    }
+  };
+
+  const handleResetTab = async (tabName) => {
+    if (window.confirm('Tem certeza que deseja restaurar as configurações desta aba para o padrão?')) {
+      await window.api.resetSettingsTab(tabName);
       const s = await window.api.getSettings();
       setSettings(s);
       setLocalSettings(s);
@@ -196,6 +208,12 @@ function Settings() {
                   (Requer que o aplicativo esteja empacotado para funcionar corretamente)
                 </p>
               </div>
+
+              <div style={{ display: 'flex', justifyContent: 'center', marginTop: '20px' }}>
+                <button className="btn-secondary" onClick={() => handleResetTab('geral')} style={{ color: 'var(--danger)', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <RotateCcw size={14} /> Restaurar Padrões Gerais
+                </button>
+              </div>
             </div>
           )}
 
@@ -258,7 +276,31 @@ function Settings() {
                 />
               </div>
 
-              <div className="setting-item" style={{ borderBottom: 'none' }}>
+              <div className="setting-item" style={{ flexDirection: 'column', alignItems: 'flex-start', borderBottom: 'none' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', marginBottom: '10px' }}>
+                  <span>Posição dos Lembretes</span>
+                  <button 
+                    className="btn-primary" 
+                    onClick={() => window.api?.startPopupPositioner()}
+                    style={{ padding: '6px 12px', fontSize: '0.8rem' }}
+                  >
+                    Ajustar na Tela
+                  </button>
+                </div>
+              </div>
+
+              <div className="setting-item" style={{ flexDirection: 'column', alignItems: 'flex-start', backgroundColor: 'rgba(0,0,0,0.1)', padding: '15px', borderRadius: '8px', marginTop: '10px' }}>
+                <span style={{ marginBottom: '10px', fontSize: '0.85rem', fontWeight: 'bold' }}>Testar Popups (Padronizados)</span>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', width: '100%' }}>
+                  <button className="btn-secondary" onClick={() => window.api?.showPopup({ type: 'reminder', id: `test-rem-${Math.random()}`, autoClose: 5000, data: { id: 'test', title: 'Lembrete de Teste', datetime: new Date().toISOString() } })}>Lembrete</button>
+                  <button className="btn-secondary" onClick={() => window.api?.showPopup({ type: 'pomodoro', id: `test-pomo-focus-${Math.random()}`, autoClose: 5000, title: 'Iniciando Foco', status: 'focus' })}>Pomo: Foco</button>
+                  <button className="btn-secondary" onClick={() => window.api?.showPopup({ type: 'pomodoro', id: `test-pomo-break-${Math.random()}`, autoClose: 5000, title: 'Iniciando Descanso', status: 'break' })}>Pomo: Descanso</button>
+                  <button className="btn-secondary" onClick={() => window.api?.showPopup({ type: 'pomodoro', id: `test-pomo-idle-${Math.random()}`, autoClose: 5000, title: 'Descanso Finalizado', status: 'idle' })}>Pomo: Finalizado</button>
+                </div>
+              </div>
+
+
+            <div className="setting-item" style={{ borderBottom: 'none' }}>
                 <span>Delay de Recolhimento (ms)</span>
                 <input 
                   type="number" 
@@ -267,6 +309,12 @@ function Settings() {
                   value={localSettings.delay || 1000}
                   onChange={(e) => updateLocalSetting('delay', e.target.value)}
                 />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'center', marginTop: '20px' }}>
+                <button className="btn-secondary" onClick={() => handleResetTab('aparencia')} style={{ color: 'var(--danger)', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <RotateCcw size={14} /> Restaurar Padrões de Aparência
+                </button>
               </div>
             </div>
           )}
@@ -329,6 +377,12 @@ function Settings() {
                     <Volume2 size={16} /> Testar Som Selecionado
                   </button>
                 </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'center', marginTop: '20px' }}>
+                <button className="btn-secondary" onClick={() => handleResetTab('audio')} style={{ color: 'var(--danger)', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <RotateCcw size={14} /> Restaurar Padrões de Áudio
+                </button>
               </div>
             </div>
           )}

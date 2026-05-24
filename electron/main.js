@@ -76,8 +76,22 @@ async function createWindow() {
   }
 }
 
-app.whenReady().then(() => {
-  createWindow();
+const gotTheLock = app.requestSingleInstanceLock();
+
+if (!gotTheLock) {
+  app.quit();
+} else {
+  app.on('second-instance', (event, commandLine, workingDirectory) => {
+    // Someone tried to run a second instance, we should focus our window.
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+      mainWindow.webContents.send('force-expand');
+    }
+  });
+
+  app.whenReady().then(() => {
+    createWindow();
 
   // Create Tray
   const iconPath = process.env.VITE_DEV_SERVER_URL
@@ -89,6 +103,15 @@ app.whenReady().then(() => {
     { label: 'Configurações', click: openSettingsWindow },
     { label: 'Lembretes', click: openHistoryWindow },
     { type: 'separator' },
+    { label: 'Reiniciar', click: () => { 
+        if (process.env.VITE_DEV_SERVER_URL) {
+          app.quit(); // Em dev mode, o Vite precisa ser reiniciado via terminal
+        } else {
+          app.relaunch(); 
+          app.exit(); 
+        }
+      } 
+    },
     { label: 'Sair', click: () => app.quit() }
   ]);
   tray.setToolTip('DeskWidget');
@@ -174,6 +197,12 @@ ipcMain.on('preview-edge', (e, tempEdge) => {
       width: EXPANDED_WIDTH,
       height: height
     });
+  }
+});
+
+ipcMain.on('pomodoro-action', (event, action) => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('pomodoro-action', action);
   }
 });
 
@@ -270,7 +299,17 @@ ipcMain.handle('reset-settings', async () => {
     if (fs.existsSync(configPath)) fs.unlinkSync(configPath);
   } catch (e) {}
   if (mainWindow) {
-    mainWindow.webContents.send('settings-updated');
+    const settings = await db.getSettings();
+    mainWindow.webContents.send('settings-updated', settings);
+  }
+  return true;
+});
+
+ipcMain.handle('reset-settings-tab', async (event, tab) => {
+  await db.resetSettingsTab(tab);
+  if (mainWindow) {
+    const settings = await db.getSettings();
+    mainWindow.webContents.send('settings-updated', settings);
   }
   return true;
 });
@@ -373,21 +412,35 @@ ipcMain.on('show-history-tab', (event, tab) => {
 });
 
 let popupWindows = [];
-ipcMain.on('show-popup', (event, reminder) => {
-  // Prevent duplicate popups for the exact same reminder
-  if (popupWindows.find(pw => pw.reminderId === reminder.id)) return;
-  
-  const primaryDisplay = screen.getPrimaryDisplay();
-  const { x, y, width, height } = primaryDisplay.workArea;
-  const pWidth = 320;
-  const pHeight = 210;
-  const gap = 10;
-  const margin = 20;
 
-  const index = popupWindows.length;
-  // Position stacked vertically from bottom up
-  const pY = y + height - margin - (pHeight + gap) * (index + 1) + gap;
-  const pX = x + width - pWidth - margin;
+const POPUP_WIDTH = 320;
+const POPUP_GAP = 4;
+
+// Refatora show-popup para suportar qualquer tipo de popup dinâmico
+ipcMain.on('show-popup', async (event, config) => {
+  // config: { id: string (unique), type: string, data: any, height: number }
+  if (popupWindows.find(pw => pw.id === config.id)) return;
+  
+  const settings = await db.getSettings();
+  const marginRight = parseInt(settings.popupMarginRight) || 20;
+  const marginBottom = parseInt(settings.popupMarginBottom) || 20;
+
+  const primaryDisplay = screen.getPrimaryDisplay();
+  // Usa bounds totais para corresponder ao que o positioner salva
+  const { x, y, width, height } = primaryDisplay.bounds;
+  
+  const pWidth = POPUP_WIDTH;
+  // PADRONIZAÇÃO GLOBAL: Todos os popups agora têm exatamente o mesmo tamanho.
+  const pHeight = 210;
+
+  // Calcula a posição Y baseada na altura acumulada dos popups já abertos
+  let accumulatedHeight = 0;
+  popupWindows.forEach(pw => {
+    accumulatedHeight += pw.height + POPUP_GAP;
+  });
+
+  const pY = y + height - marginBottom - pHeight - accumulatedHeight;
+  const pX = x + width - pWidth - marginRight;
 
   let newPopupWindow = new BrowserWindow({
     width: pWidth,
@@ -404,27 +457,164 @@ ipcMain.on('show-popup', (event, reminder) => {
     },
   });
   
-  newPopupWindow.reminderId = reminder.id;
+  const popupObj = { window: newPopupWindow, id: config.id, height: pHeight };
+  popupWindows.push(popupObj);
   
-  const encodedReminder = encodeURIComponent(JSON.stringify(reminder));
+  const encodedData = encodeURIComponent(JSON.stringify(config));
   const url = process.env.VITE_DEV_SERVER_URL 
-    ? `${process.env.VITE_DEV_SERVER_URL}#/popup?data=${encodedReminder}` 
-    : `file://${path.join(__dirname, '../dist/index.html')}#/popup?data=${encodedReminder}`;
+    ? `${process.env.VITE_DEV_SERVER_URL}#/popup?config=${encodedData}` 
+    : `file://${path.join(__dirname, '../dist/index.html')}#/popup?config=${encodedData}`;
   
   newPopupWindow.loadURL(url);
   newPopupWindow.on('closed', () => {
-    popupWindows = popupWindows.filter(pw => pw !== newPopupWindow);
-    // Recalculate positions for remaining popups to slide down
-    popupWindows.forEach((pw, i) => {
-      const newY = y + height - margin - (pHeight + gap) * (i + 1) + gap;
-      pw.setBounds({ x: pX, y: newY, width: pWidth, height: pHeight });
+    popupWindows = popupWindows.filter(pw => pw.id !== config.id);
+    recalculatePopupPositions();
+  });
+});
+
+function recalculatePopupPositions() {
+  db.getSettings().then(settings => {
+    const marginRight = parseInt(settings.popupMarginRight) || 20;
+    const marginBottom = parseInt(settings.popupMarginBottom) || 20;
+    const primaryDisplay = screen.getPrimaryDisplay();
+    // Usa bounds totais para corresponder ao que o positioner salva
+    const { x, y, width, height } = primaryDisplay.bounds;
+
+    let accumulatedHeight = 0;
+    popupWindows.forEach((pw) => {
+      const pY = y + height - marginBottom - pw.height - accumulatedHeight;
+      const pX = x + width - POPUP_WIDTH - marginRight;
+      if (!pw.window.isDestroyed()) {
+        pw.window.setBounds({ x: pX, y: pY, width: POPUP_WIDTH, height: pw.height });
+      }
+      accumulatedHeight += pw.height + POPUP_GAP;
     });
   });
+}
 
-  popupWindows.push(newPopupWindow);
+// Inicia o modo de posicionamento interativo
+ipcMain.on('start-popup-positioner', async () => {
+  if (popupWindows.find(pw => pw.id === 'positioner')) return;
+
+  const settings = await db.getSettings();
+  const marginRight = parseInt(settings.popupMarginRight) || 20;
+  const marginBottom = parseInt(settings.popupMarginBottom) || 20;
+  
+  const primaryDisplay = screen.getPrimaryDisplay();
+  // bounds = tela total (inclui barra de tarefas)
+  const { x: sx, y: sy, width: sw, height: sh } = primaryDisplay.bounds;
+  const pWidth = POPUP_WIDTH;
+  const pHeight = 210;
+  
+  // Posiciona a janela com base nos margens salvas (canto inferior direito como âncora)
+  const pX = Math.min(sx + sw - pWidth - marginRight, sx + sw - pWidth);
+  const pY = Math.min(sy + sh - pHeight - marginBottom, sy + sh - pHeight);
+
+  let positionerWin = new BrowserWindow({
+    width: pWidth,
+    height: pHeight,
+    x: Math.max(sx, pX),
+    y: Math.max(sy, pY),
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    resizable: false,
+    hasShadow: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+    },
+  });
+
+  const config = { id: 'positioner', type: 'positioner', height: pHeight };
+  const encodedData = encodeURIComponent(JSON.stringify(config));
+  const url = process.env.VITE_DEV_SERVER_URL 
+    ? `${process.env.VITE_DEV_SERVER_URL}#/popup?config=${encodedData}` 
+    : `file://${path.join(__dirname, '../dist/index.html')}#/popup?config=${encodedData}`;
+
+  positionerWin.loadURL(url);
+
+  // Atualiza métricas e garante que a janela não saia dos limites da tela total
+  let isClamping = false;
+  positionerWin.on('move', () => {
+    if (positionerWin.isDestroyed() || isClamping) return;
+    const b = positionerWin.getBounds();
+    
+    // Clamp dentro dos limites totais da tela
+    const clampedX = Math.max(sx, Math.min(b.x, sx + sw - b.width));
+    const clampedY = Math.max(sy, Math.min(b.y, sy + sh - b.height));
+    
+    if (clampedX !== b.x || clampedY !== b.y) {
+      isClamping = true;
+      positionerWin.setBounds({ x: clampedX, y: clampedY, width: b.width, height: b.height });
+      isClamping = false;
+    }
+
+    // Métricas baseadas na tela total (incluindo barra de tarefas)
+    const finalBounds = positionerWin.getBounds();
+    const mRight = Math.max(0, (sx + sw) - (finalBounds.x + finalBounds.width));
+    const mBottom = Math.max(0, (sy + sh) - (finalBounds.y + finalBounds.height));
+    const maxRight = sw - pWidth;
+    const maxBottom = sh - pHeight;
+    positionerWin.webContents.send('positioner-metrics', { right: mRight, bottom: mBottom, maxRight, maxBottom });
+  });
+
+  positionerWin.on('closed', () => {
+    popupWindows = popupWindows.filter(pw => pw.id !== 'positioner');
+  });
+
+  popupWindows.push({ window: positionerWin, id: 'positioner', height: pHeight });
+  
+  // Envia margins atuais ao popup
+  positionerWin.webContents.on('did-finish-load', () => {
+    const maxRight = sw - pWidth;
+    const maxBottom = sh - pHeight;
+    positionerWin.webContents.send('positioner-metrics', { right: marginRight, bottom: marginBottom, maxRight, maxBottom });
+  });
 });
+
+// Move o positioner em tempo real baseado nos valores dos inputs
+ipcMain.on('set-positioner-margins', (event, right, bottom) => {
+  const pw = popupWindows.find(p => p.id === 'positioner');
+  if (!pw || pw.window.isDestroyed()) return;
+  const primaryDisplay = screen.getPrimaryDisplay();
+  // Usa bounds totais (inclui barra de tarefas) para posicionar via inputs
+  const { x: sx, y: sy, width: sw, height: sh } = primaryDisplay.bounds;
+  const pWidth = POPUP_WIDTH;
+  const pHeight = pw.height;
+  // Clamp: nunca ultrapassa nenhuma borda
+  const safeRight = Math.max(0, Math.min(right, sw - pWidth));
+  const safeBottom = Math.max(0, Math.min(bottom, sh - pHeight));
+  const newX = sx + sw - pWidth - safeRight;
+  const newY = sy + sh - pHeight - safeBottom;
+  pw.window.setBounds({ x: newX, y: newY, width: pWidth, height: pHeight });
+});
+
+ipcMain.handle('get-positioner-margins', async () => {
+  const settings = await db.getSettings();
+  return {
+    right: parseInt(settings.popupMarginRight) || 20,
+    bottom: parseInt(settings.popupMarginBottom) || 20,
+  };
+});
+
+ipcMain.on('save-popup-position', async (event, margins) => {
+  // margins = { right, bottom } — ponto de âncora é sempre o canto inferior direito do popup
+  const mRight = Math.max(0, Math.round(margins.right));
+  const mBottom = Math.max(0, Math.round(margins.bottom));
+  
+  await db.updateSetting('popupMarginRight', mRight.toString());
+  await db.updateSetting('popupMarginBottom', mBottom.toString());
+  
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (win) win.close();
+
+  // Reposiciona popups já abertos
+  recalculatePopupPositions();
+});
+
 
 ipcMain.on('close-window', (event) => {
     const win = BrowserWindow.fromWebContents(event.sender);
     if(win) win.close();
 });
+}

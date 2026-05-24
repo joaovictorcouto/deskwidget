@@ -9,8 +9,16 @@ electron.contextBridge.exposeInMainWorld("api", {
 	openHistory: () => electron.ipcRenderer.send("open-history"),
 	showHistoryTab: (tab) => electron.ipcRenderer.send("show-history-tab", tab),
 	onHistoryTab: (callback) => electron.ipcRenderer.on("set-history-tab", (event, tab) => callback(tab)),
-	showPopup: (reminder) => electron.ipcRenderer.send("show-popup", reminder),
+	showPopup: (config) => electron.ipcRenderer.send("show-popup", config),
 	closeWindow: () => electron.ipcRenderer.send("close-window"),
+	startPopupPositioner: () => electron.ipcRenderer.send("start-popup-positioner"),
+	savePopupPosition: (bounds) => electron.ipcRenderer.send("save-popup-position", bounds),
+	setPositionerMargins: (right, bottom) => electron.ipcRenderer.send("set-positioner-margins", right, bottom),
+	getPositionerMargins: () => electron.ipcRenderer.invoke("get-positioner-margins"),
+	onPositionerMetrics: (callback) => {
+		electron.ipcRenderer.on("positioner-metrics", (event, metrics) => callback(metrics));
+		return () => electron.ipcRenderer.removeListener("positioner-metrics", callback);
+	},
 	getTasks: () => electron.ipcRenderer.invoke("get-tasks"),
 	addTask: (title, tag, tagColor) => electron.ipcRenderer.invoke("add-task", title, tag, tagColor),
 	toggleTask: (id, completed) => electron.ipcRenderer.invoke("toggle-task", id, completed),
@@ -18,6 +26,11 @@ electron.contextBridge.exposeInMainWorld("api", {
 	deleteTask: (id) => electron.ipcRenderer.invoke("delete-task", id),
 	updateTaskTag: (oldTag, newTag, newTagColor) => electron.ipcRenderer.invoke("update-task-tag", oldTag, newTag, newTagColor),
 	reorderTasks: (taskIds) => electron.ipcRenderer.invoke("reorder-tasks", taskIds),
+	sendPomodoroAction: (action) => electron.ipcRenderer.send("pomodoro-action", action),
+	onPomodoroAction: (callback) => {
+		electron.ipcRenderer.on("pomodoro-action", (event, action) => callback(action));
+		return () => electron.ipcRenderer.removeListener("pomodoro-action", callback);
+	},
 	getReminders: () => electron.ipcRenderer.invoke("get-reminders"),
 	addReminder: (title, datetime, recurrence) => electron.ipcRenderer.invoke("add-reminder", title, datetime, recurrence),
 	updateReminder: (id, status, newDatetime) => electron.ipcRenderer.invoke("update-reminder", id, status, newDatetime),
@@ -32,6 +45,7 @@ electron.contextBridge.exposeInMainWorld("api", {
 	getSettings: () => electron.ipcRenderer.invoke("get-settings"),
 	updateSetting: (key, value) => electron.ipcRenderer.invoke("update-setting", key, value),
 	resetSettings: () => electron.ipcRenderer.invoke("reset-settings"),
+	resetSettingsTab: (tab) => electron.ipcRenderer.invoke("reset-settings-tab", tab),
 	onSettingsUpdated: (callback) => {
 		electron.ipcRenderer.on("settings-updated", callback);
 		return () => electron.ipcRenderer.removeListener("settings-updated", callback);

@@ -291,3 +291,42 @@ export function resetSettings() {
     });
   });
 }
+
+export function resetSettingsTab(tab) {
+  return new Promise((resolve, reject) => {
+    let keysToDelete = [];
+    
+    if (tab === 'geral') {
+      keysToDelete = ['position', 'delay', 'startOnWindows', 'enableTasks', 'enableReminders', 'enableNotes', 'enableTags', 'taskSortOrder', 'pomodoroFocus', 'pomodoroBreak'];
+    } else if (tab === 'aparencia') {
+      keysToDelete = ['opacity', 'expandedOpacity', 'theme', 'colorR', 'colorG', 'colorB'];
+    } else if (tab === 'audio') {
+      keysToDelete = ['soundEnabled', 'soundVolume', 'soundType', 'pomodoroSound'];
+    }
+
+    if (keysToDelete.length === 0) return resolve(true);
+
+    const placeholders = keysToDelete.map(() => '?').join(',');
+    db.run(`DELETE FROM settings WHERE key IN (${placeholders})`, keysToDelete, (err) => {
+      if (err) return reject(err);
+      
+      const defaults = {
+        'opacity': '90',
+        'position': 'direita',
+        'theme': 'escuro',
+        'delay': '1000',
+        'startOnWindows': 'false',
+        'enableTasks': 'true',
+        'enableReminders': 'true'
+      };
+
+      keysToDelete.forEach(k => {
+        if (defaults[k]) {
+          db.run("INSERT INTO settings (key, value) VALUES (?, ?)", [k, defaults[k]]);
+        }
+      });
+      
+      resolve(true);
+    });
+  });
+}

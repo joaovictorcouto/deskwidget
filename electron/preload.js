@@ -10,8 +10,18 @@ contextBridge.exposeInMainWorld('api', {
   openHistory: () => ipcRenderer.send('open-history'),
   showHistoryTab: (tab) => ipcRenderer.send('show-history-tab', tab),
   onHistoryTab: (callback) => ipcRenderer.on('set-history-tab', (event, tab) => callback(tab)),
-  showPopup: (reminder) => ipcRenderer.send('show-popup', reminder),
+  showPopup: (config) => ipcRenderer.send('show-popup', config),
   closeWindow: () => ipcRenderer.send('close-window'),
+  
+  // Popup Positioner
+  startPopupPositioner: () => ipcRenderer.send('start-popup-positioner'),
+  savePopupPosition: (bounds) => ipcRenderer.send('save-popup-position', bounds),
+  setPositionerMargins: (right, bottom) => ipcRenderer.send('set-positioner-margins', right, bottom),
+  getPositionerMargins: () => ipcRenderer.invoke('get-positioner-margins'),
+  onPositionerMetrics: (callback) => {
+    ipcRenderer.on('positioner-metrics', (event, metrics) => callback(metrics));
+    return () => ipcRenderer.removeListener('positioner-metrics', callback);
+  },
 
   // Tasks
   getTasks: () => ipcRenderer.invoke('get-tasks'),
@@ -21,6 +31,13 @@ contextBridge.exposeInMainWorld('api', {
   deleteTask: (id) => ipcRenderer.invoke('delete-task', id),
   updateTaskTag: (oldTag, newTag, newTagColor) => ipcRenderer.invoke('update-task-tag', oldTag, newTag, newTagColor),
   reorderTasks: (taskIds) => ipcRenderer.invoke('reorder-tasks', taskIds),
+
+  // Pomodoro
+  sendPomodoroAction: (action) => ipcRenderer.send('pomodoro-action', action),
+  onPomodoroAction: (callback) => {
+    ipcRenderer.on('pomodoro-action', (event, action) => callback(action));
+    return () => ipcRenderer.removeListener('pomodoro-action', callback);
+  },
 
   // Reminders
   getReminders: () => ipcRenderer.invoke('get-reminders'),
@@ -39,6 +56,7 @@ contextBridge.exposeInMainWorld('api', {
   getSettings: () => ipcRenderer.invoke('get-settings'),
   updateSetting: (key, value) => ipcRenderer.invoke('update-setting', key, value),
   resetSettings: () => ipcRenderer.invoke('reset-settings'),
+  resetSettingsTab: (tab) => ipcRenderer.invoke('reset-settings-tab', tab),
   onSettingsUpdated: (callback) => {
     ipcRenderer.on('settings-updated', callback);
     return () => ipcRenderer.removeListener('settings-updated', callback);

@@ -35,6 +35,7 @@ function Widget() {
   const [newReminderRecurrence, setNewReminderRecurrence] = useState('none');
   const [editingTag, setEditingTag] = useState(null);
   const [editingTagValue, setEditingTagValue] = useState('');
+  const [taskSortOrder, setTaskSortOrder] = useState('custom');
   const tagMenuRef = useRef(null);
 
   useEffect(() => {
@@ -63,6 +64,7 @@ function Widget() {
       setSettings(s);
       if (s.edge) setEdge(s.edge);
       if (s.yPosition) setYPos(parseInt(s.yPosition));
+      if (s.taskSortOrder) setTaskSortOrder(s.taskSortOrder);
       if (s.quickNote && quickNote === '') setQuickNote(s.quickNote);
       if (s.savedTags) {
         try {
@@ -215,28 +217,49 @@ function Widget() {
     };
   }, [isExpanded, settings.delay]);
   
-  // Efeito isolado para o tick do Pomodoro
   useEffect(() => {
-    let pTimer;
+    let interval = null;
     if (pomodoroStatus === 'running' || pomodoroStatus === 'break') {
-      pTimer = setInterval(() => {
+      interval = setInterval(() => {
         setPomodoroTimeLeft(prev => {
           if (prev <= 1) {
-            clearInterval(pTimer);
-            // Terminou o tempo
-            import('./utils/audio.js').then(module => {
-              const vol = settings.soundVolume ? parseInt(settings.soundVolume) / 100 : 0.8;
-              const type = settings.pomodoroSound || 'sino';
-              module.playNotificationSound(vol, type);
-            });
+            clearInterval(interval);
             return 0;
           }
           return prev - 1;
         });
       }, 1000);
     }
-    return () => clearInterval(pTimer);
-  }, [pomodoroStatus, settings]);
+    return () => clearInterval(interval);
+  }, [pomodoroStatus]);
+
+  useEffect(() => {
+    if (pomodoroTimeLeft === 0) {
+      if (pomodoroStatus === 'running') {
+        setPomodoroStatus('break');
+        if (window.api) window.api.showPopup({ type: 'pomodoro', id: 'pomodoro-break', autoClose: 3000, title: 'Iniciando descanso...', status: 'break', height: 160 });
+        setPomodoroTimeLeft((parseInt(settings.pomodoroBreak) || 5) * 60);
+      } else if (pomodoroStatus === 'break') {
+        setPomodoroStatus('idle');
+        if (window.api) window.api.showPopup({ type: 'pomodoro', id: 'pomodoro-idle', autoClose: 10000, title: 'Descanso finalizado', status: 'idle', height: 160 });
+        setPomodoroTimeLeft((parseInt(settings.pomodoroFocus) || 25) * 60);
+      }
+    }
+  }, [pomodoroTimeLeft, pomodoroStatus, settings]);
+
+  useEffect(() => {
+    if (window.api && window.api.onPomodoroAction) {
+      return window.api.onPomodoroAction((action) => {
+        if (action === 'stop') {
+          setPomodoroStatus('idle');
+          setPomodoroTimeLeft((parseInt(settings.pomodoroFocus) || 25) * 60);
+        } else if (action === 'start-focus') {
+          setPomodoroStatus('running');
+          setPomodoroTimeLeft((parseInt(settings.pomodoroFocus) || 25) * 60);
+        }
+      });
+    }
+  }, [settings]);
 
   const handlePomodoroToggle = () => {
     if (pomodoroStatus === 'idle') {
@@ -247,7 +270,6 @@ function Widget() {
     } else if (pomodoroStatus === 'paused') {
       setPomodoroStatus('running');
     } else {
-      // Break over, go idle
       setPomodoroStatus('idle');
     }
   };
@@ -281,7 +303,7 @@ function Widget() {
                   // Se passou do horário em até 5 minutos, exibe o popup
                   if ((now - remDate) < 5 * 60000) {
                       if (!shownRemindersRef.current.has(rem.id)) {
-                          window.api.showPopup(rem);
+                          window.api.showPopup({ type: 'reminder', id: `rem-${rem.id}`, data: rem, height: 210 });
                           shownRemindersRef.current.add(rem.id);
                       }
                   } else {
@@ -427,11 +449,17 @@ function Widget() {
     }
   };
 
-  const handleDeleteTag = (tagName) => {
-    const newTags = savedTags.filter(t => t.name !== tagName);
-    setSavedTags(newTags);
-    if (window.api) window.api.updateSetting('savedTags', JSON.stringify(newTags));
-    if (selectedTag === tagName) setSelectedTag('');
+  const handleDeleteTag = async (tagName) => {
+    if (window.confirm("Ao excluir esta etiqueta, todas as tarefas vinculadas ficarão sem etiqueta.")) {
+      const newTags = savedTags.filter(t => t.name !== tagName);
+      setSavedTags(newTags);
+      if (window.api) {
+        window.api.updateSetting('savedTags', JSON.stringify(newTags));
+        await window.api.updateTaskTag(tagName, null, null);
+        loadData();
+      }
+      if (selectedTag === tagName) setSelectedTag('');
+    }
   };
 
   const handleSaveTagEdit = async () => {
@@ -477,16 +505,6 @@ function Widget() {
     }
   };
 
-  const handleTestPopup = () => {
-    if (window.api) {
-      window.api.showPopup({
-        id: 'test',
-        title: 'Lembrete de Teste',
-        datetime: new Date().toISOString()
-      });
-    }
-  };
-
 
   const openSettings = () => {
     isSettingsOpenRef.current = true;
@@ -494,7 +512,24 @@ function Widget() {
   };
   const openHistory = () => window.api?.openHistory();
 
-  const pendingTasks = tasks.filter(t => !t.completed);
+  const getSortedPendingTasks = () => {
+    let pt = tasks.filter(t => !t.completed);
+    switch (taskSortOrder) {
+      case 'newest_top':
+        return pt.sort((a, b) => b.id - a.id);
+      case 'newest_bottom':
+        return pt.sort((a, b) => a.id - b.id);
+      case 'az':
+        return pt.sort((a, b) => a.title.localeCompare(b.title));
+      case 'za':
+        return pt.sort((a, b) => b.title.localeCompare(a.title));
+      case 'custom':
+      default:
+        return pt.sort((a, b) => a.position - b.position);
+    }
+  };
+
+  const pendingTasks = getSortedPendingTasks();
   const completedTasks = tasks.filter(t => t.completed).sort((a, b) => new Date(b.completedAt) - new Date(a.completedAt));
   
   const nextReminders = reminders
@@ -523,6 +558,12 @@ function Widget() {
 
   const handleDragEnd = async (result) => {
     if (!result.destination) return;
+    
+    if (taskSortOrder !== 'custom') {
+      setTaskSortOrder('custom');
+      if (window.api) await window.api.updateSetting('taskSortOrder', 'custom');
+    }
+
     const sourceIndex = result.source.index;
     const destIndex = result.destination.index;
     if (sourceIndex === destIndex) return;
@@ -606,8 +647,11 @@ function Widget() {
         )}
 
         {settings.enablePomodoro === 'true' && (
-          <div style={{ padding: '15px', borderBottom: '1px solid var(--border)', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            <div style={{ fontSize: '2rem', fontWeight: 'bold', fontFamily: 'monospace', color: pomodoroStatus === 'break' ? 'var(--success)' : 'var(--primary)' }}>
+          <div style={{ padding: '15px', borderBottom: '1px solid var(--border)', display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative' }}>
+            <div style={{ position: 'absolute', top: '10px', left: '15px', fontSize: '0.75rem', fontWeight: 700, letterSpacing: '1px', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <Clock size={12} /> POMODORO
+            </div>
+            <div style={{ fontSize: '2.2rem', fontWeight: 'bold', fontFamily: 'monospace', color: pomodoroStatus === 'break' ? 'var(--success)' : 'var(--primary)', marginTop: '10px' }}>
               {pomodoroStatus === 'idle' ? `${String(settings.pomodoroFocus || 25).padStart(2, '0')}:00` : formatPomodoroTime(pomodoroTimeLeft)}
             </div>
             <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
@@ -630,8 +674,23 @@ function Widget() {
 
         {showTasks && (
         <div className="half-section">
-          <div className="fixed-half-header">
+          <div className="fixed-half-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{color: '#e0c0aa'}}>📋 TAREFAS</span>
+            <select 
+               style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', fontSize: '0.7rem', outline: 'none', cursor: 'pointer' }}
+               value={taskSortOrder}
+               onChange={(e) => {
+                 const v = e.target.value;
+                 setTaskSortOrder(v);
+                 if (window.api) window.api.updateSetting('taskSortOrder', v);
+               }}
+            >
+               <option value="custom" style={{ color: '#000' }}>Personalizada (Drag)</option>
+               <option value="newest_bottom" style={{ color: '#000' }}>Novas embaixo</option>
+               <option value="newest_top" style={{ color: '#000' }}>Novas em cima</option>
+               <option value="az" style={{ color: '#000' }}>Ordem Alfabética (A-Z)</option>
+               <option value="za" style={{ color: '#000' }}>Ordem Alfabética (Z-A)</option>
+            </select>
           </div>
 
           <div style={{ padding: '10px 15px 5px 15px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
@@ -664,7 +723,7 @@ function Widget() {
                             style={{ fontSize: '0.7rem', padding: '3px 8px', borderRadius: '12px', cursor: 'pointer', border: '1px solid var(--border)', backgroundColor: !selectedTag ? 'rgba(255,255,255,0.1)' : 'transparent' }}
                             onClick={() => { setSelectedTag(''); setShowTagMenu(false); }}
                           >Nenhuma</span>
-                          {savedTags.map(tag => (
+                          {[...savedTags].sort((a,b) => a.name.localeCompare(b.name)).map(tag => (
                             editingTag === tag.name ? (
                               <input
                                 key={`edit-${tag.name}`}
@@ -679,10 +738,10 @@ function Widget() {
                               <span 
                                 key={tag.name}
                                 style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.7rem', padding: '2px 6px', borderRadius: '12px', cursor: 'pointer', backgroundColor: tag.color, color: '#fff', opacity: selectedTag === tag.name ? 1 : 0.6 }}
+                                onContextMenu={(e) => { e.preventDefault(); setEditingTag(tag.name); setEditingTagValue(tag.name); }}
                               >
                                 <span 
                                   onClick={() => { setSelectedTag(tag.name); setShowTagMenu(false); }}
-                                  onDoubleClick={() => { setEditingTag(tag.name); setEditingTagValue(tag.name); }}
                                 >
                                   {tag.name}
                                 </span>
@@ -714,7 +773,7 @@ function Widget() {
             <DragDropContext onDragEnd={handleDragEnd}>
               <Droppable droppableId="pendingTasks">
                 {(provided) => (
-                  <div className="task-list" {...provided.droppableProps} ref={provided.innerRef}>
+                  <div className="task-list" {...provided.droppableProps} ref={provided.innerRef} style={{ paddingTop: '25px' }}>
                     {pendingTasks.map((task, index) => (
                       <Draggable key={task.id.toString()} draggableId={task.id.toString()} index={index}>
                         {(provided) => (
@@ -817,16 +876,23 @@ function Widget() {
                         }}
                       />
                     ) : (
-                      <span 
-                        className="task-title completed" 
-                        style={{ flex: 1, cursor: 'text' }}
-                        onClick={() => {
-                          setEditingTaskId(task.id);
-                          setEditingTaskTitle(task.title);
-                        }}
-                      >
-                        {task.title}
-                      </span>
+                      <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
+                        <span 
+                          className="task-title completed" 
+                          style={{ cursor: 'text', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                          onClick={() => {
+                            setEditingTaskId(task.id);
+                            setEditingTaskTitle(task.title);
+                          }}
+                        >
+                          {task.title}
+                        </span>
+                        {settings.enableTags === 'true' && task.tag && (
+                          <span style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', backgroundColor: task.tagColor, color: '#fff', fontWeight: 600, flexShrink: 0, opacity: 0.7 }}>
+                            {task.tag}
+                          </span>
+                        )}
+                      </div>
                     )}
                     <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
                       {formatCompletedDate(task.completedAt)}
@@ -847,7 +913,6 @@ function Widget() {
           <div className="fixed-half-header">
             <span style={{color: '#ffd166'}}>🔔 LEMBRETES</span>
             <div style={{ display: 'flex', gap: '8px' }}>
-              <a className="section-title-action" onClick={handleTestPopup}>Testar</a>
               <a className="section-title-action" onClick={openHistory}>Ver Todos</a>
             </div>
           </div>
