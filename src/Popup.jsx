@@ -18,7 +18,7 @@ function PopupShell({ label, labelIcon, rightAction, progressBar, draggable, chi
     <div
       className="standalone-window"
       style={{
-        height: '100%', borderRadius: '12px', border: '1px solid var(--border)',
+        height: '100vh', borderRadius: '12px', border: '1px solid var(--border)',
         display: 'flex', flexDirection: 'column', overflow: 'hidden',
         WebkitAppRegion: draggable ? 'drag' : 'no-drag',
         position: 'relative',

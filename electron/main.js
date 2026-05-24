@@ -262,6 +262,7 @@ ipcMain.handle('clear-history', async () => { const r = await db.clearHistory();
 ipcMain.handle('get-settings', async () => await db.getSettings());
 ipcMain.handle('update-setting', async (event, key, value) => {
   await db.updateSetting(key, value);
+  if (key === 'popupGap') recalculatePopupPositions();
   if (key === 'startOnWindows') {
     app.setLoginItemSettings({
       openAtLogin: value === 'true',
@@ -414,7 +415,6 @@ ipcMain.on('show-history-tab', (event, tab) => {
 let popupWindows = [];
 
 const POPUP_WIDTH = 320;
-const POPUP_GAP = 4;
 
 // Refatora show-popup para suportar qualquer tipo de popup dinâmico
 ipcMain.on('show-popup', async (event, config) => {
@@ -424,6 +424,7 @@ ipcMain.on('show-popup', async (event, config) => {
   const settings = await db.getSettings();
   const marginRight = parseInt(settings.popupMarginRight) || 20;
   const marginBottom = parseInt(settings.popupMarginBottom) || 20;
+  const popupGap = settings.popupGap !== undefined ? parseInt(settings.popupGap) : 4;
 
   const primaryDisplay = screen.getPrimaryDisplay();
   // Usa bounds totais para corresponder ao que o positioner salva
@@ -436,7 +437,7 @@ ipcMain.on('show-popup', async (event, config) => {
   // Calcula a posição Y baseada na altura acumulada dos popups já abertos
   let accumulatedHeight = 0;
   popupWindows.forEach(pw => {
-    accumulatedHeight += pw.height + POPUP_GAP;
+    accumulatedHeight += pw.height + popupGap;
   });
 
   const pY = y + height - marginBottom - pHeight - accumulatedHeight;
@@ -476,18 +477,19 @@ function recalculatePopupPositions() {
   db.getSettings().then(settings => {
     const marginRight = parseInt(settings.popupMarginRight) || 20;
     const marginBottom = parseInt(settings.popupMarginBottom) || 20;
+    const popupGap = settings.popupGap !== undefined ? parseInt(settings.popupGap) : 4;
     const primaryDisplay = screen.getPrimaryDisplay();
     // Usa bounds totais para corresponder ao que o positioner salva
     const { x, y, width, height } = primaryDisplay.bounds;
-
+    
     let accumulatedHeight = 0;
-    popupWindows.forEach((pw) => {
+    popupWindows.forEach(pw => {
       const pY = y + height - marginBottom - pw.height - accumulatedHeight;
       const pX = x + width - POPUP_WIDTH - marginRight;
       if (!pw.window.isDestroyed()) {
         pw.window.setBounds({ x: pX, y: pY, width: POPUP_WIDTH, height: pw.height });
       }
-      accumulatedHeight += pw.height + POPUP_GAP;
+      accumulatedHeight += pw.height + popupGap;
     });
   });
 }
@@ -559,10 +561,8 @@ ipcMain.on('start-popup-positioner', async () => {
   });
 
   positionerWin.on('closed', () => {
-    popupWindows = popupWindows.filter(pw => pw.id !== 'positioner');
+    // Não precisa filtrar de popupWindows pois não está na lista
   });
-
-  popupWindows.push({ window: positionerWin, id: 'positioner', height: pHeight });
   
   // Envia margins atuais ao popup
   positionerWin.webContents.on('did-finish-load', () => {

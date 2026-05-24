@@ -290,6 +290,18 @@ function Settings() {
               </div>
 
               <div className="setting-item" style={{ flexDirection: 'column', alignItems: 'flex-start', backgroundColor: 'rgba(0,0,0,0.1)', padding: '15px', borderRadius: '8px', marginTop: '10px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: '15px', paddingBottom: '15px', borderBottom: '1px solid var(--border)' }}>
+                  <span style={{ fontSize: '0.85rem' }}>Distância no empilhamento (px)</span>
+                  <input 
+                    type="number" 
+                    min="0"
+                    max="100"
+                    className="form-control"
+                    style={{ width: '60px', padding: '4px', textAlign: 'center' }}
+                    value={localSettings.popupGap !== undefined ? localSettings.popupGap : 4}
+                    onChange={(e) => setLocalSettings({...localSettings, popupGap: parseInt(e.target.value) || 0})}
+                  />
+                </div>
                 <span style={{ marginBottom: '10px', fontSize: '0.85rem', fontWeight: 'bold' }}>Testar Popups (Padronizados)</span>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', width: '100%' }}>
                   <button className="btn-secondary" onClick={() => window.api?.showPopup({ type: 'reminder', id: `test-rem-${Math.random()}`, autoClose: 5000, data: { id: 'test', title: 'Lembrete de Teste', datetime: new Date().toISOString() } })}>Lembrete</button>

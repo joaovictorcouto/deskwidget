@@ -607,6 +607,7 @@ else {
 	electron.ipcMain.handle("get-settings", async () => await getSettings());
 	electron.ipcMain.handle("update-setting", async (event, key, value) => {
 		await updateSetting(key, value);
+		if (key === "popupGap") recalculatePopupPositions();
 		if (key === "startOnWindows") electron.app.setLoginItemSettings({
 			openAtLogin: value === "true",
 			path: electron.app.getPath("exe")
@@ -726,18 +727,18 @@ else {
 	});
 	let popupWindows = [];
 	const POPUP_WIDTH = 320;
-	const POPUP_GAP = 4;
 	electron.ipcMain.on("show-popup", async (event, config) => {
 		if (popupWindows.find((pw) => pw.id === config.id)) return;
 		const settings = await getSettings();
 		const marginRight = parseInt(settings.popupMarginRight) || 20;
 		const marginBottom = parseInt(settings.popupMarginBottom) || 20;
+		const popupGap = settings.popupGap !== void 0 ? parseInt(settings.popupGap) : 4;
 		const { x, y, width, height } = electron.screen.getPrimaryDisplay().bounds;
 		const pWidth = POPUP_WIDTH;
 		const pHeight = 210;
 		let accumulatedHeight = 0;
 		popupWindows.forEach((pw) => {
-			accumulatedHeight += pw.height + POPUP_GAP;
+			accumulatedHeight += pw.height + popupGap;
 		});
 		const pY = y + height - marginBottom - pHeight - accumulatedHeight;
 		let newPopupWindow = new electron.BrowserWindow({
@@ -770,6 +771,7 @@ else {
 		getSettings().then((settings) => {
 			const marginRight = parseInt(settings.popupMarginRight) || 20;
 			const marginBottom = parseInt(settings.popupMarginBottom) || 20;
+			const popupGap = settings.popupGap !== void 0 ? parseInt(settings.popupGap) : 4;
 			const { x, y, width, height } = electron.screen.getPrimaryDisplay().bounds;
 			let accumulatedHeight = 0;
 			popupWindows.forEach((pw) => {
@@ -781,7 +783,7 @@ else {
 					width: POPUP_WIDTH,
 					height: pw.height
 				});
-				accumulatedHeight += pw.height + POPUP_GAP;
+				accumulatedHeight += pw.height + popupGap;
 			});
 		});
 	}
@@ -842,14 +844,7 @@ else {
 				maxBottom
 			});
 		});
-		positionerWin.on("closed", () => {
-			popupWindows = popupWindows.filter((pw) => pw.id !== "positioner");
-		});
-		popupWindows.push({
-			window: positionerWin,
-			id: "positioner",
-			height: pHeight
-		});
+		positionerWin.on("closed", () => {});
 		positionerWin.webContents.on("did-finish-load", () => {
 			const maxRight = sw - pWidth;
 			const maxBottom = sh - pHeight;
