@@ -55,22 +55,22 @@ function Popup() {
 
   return (
     <div className="standalone-window" style={{ height: '100%', borderRadius: '12px', border: '1px solid var(--border)' }}>
-      <div style={{ padding: '15px 20px', display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid var(--border)', fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--text-muted)' }}>
+      <div style={{ padding: '12px 15px', display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid var(--border)', fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--text-muted)' }}>
         <img src="/logo-icon.png" alt="Logo" style={{ height: '16px', objectFit: 'contain' }} onError={(e) => e.target.style.display = 'none'} />
         LEMBRETE
       </div>
 
-      <div style={{ padding: '20px', flex: 1, display: 'flex', flexDirection: 'column' }}>
-        <h2 style={{ fontSize: '1.2rem', marginBottom: '8px' }}>{reminder.title}</h2>
+      <div style={{ padding: '15px', flex: 1, display: 'flex', flexDirection: 'column' }}>
+        <h2 style={{ fontSize: '1.1rem', marginBottom: '8px' }}>{reminder.title}</h2>
         <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '5px', marginBottom: 'auto' }}>
           <Clock size={14} /> Agora - {new Date(reminder.datetime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
         </p>
 
-        <div style={{ display: 'flex', gap: '10px', marginTop: '15px', position: 'relative' }}>
-          <button className="btn-primary" style={{ flex: 2, padding: '12px' }} onClick={handleComplete}>
+        <div style={{ display: 'flex', gap: '10px', marginTop: '12px', position: 'relative' }}>
+          <button className="btn-primary" style={{ flex: 2, padding: '10px' }} onClick={handleComplete}>
             <CheckCircle size={16} /> Concluir
           </button>
-          <button className="btn-secondary" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }} onClick={() => setShowOptions(!showOptions)}>
+          <button className="btn-secondary" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px', padding: '10px' }} onClick={() => setShowOptions(!showOptions)}>
             <Clock size={16} /> Adiar
           </button>
 

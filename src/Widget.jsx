@@ -164,18 +164,27 @@ function Widget() {
       if (!window.api) return;
       const r = await window.api.getReminders();
       const now = new Date();
-      r.forEach(rem => {
+      let changed = false;
+      
+      for (const rem of r) {
           if (rem.status === 'agendado') {
               const remDate = new Date(rem.datetime);
-              // Verifica se chegou o horário exato ou passou até 5 minutos (para evitar trigger velho se PC desligar)
-              if (!shownRemindersRef.current.has(rem.id)) {
-                if (now >= remDate && (now - remDate) < 5 * 60000) {
-                    window.api.showPopup(rem);
-                    shownRemindersRef.current.add(rem.id);
-                }
+              if (now >= remDate) {
+                  // Se passou do horário em até 5 minutos, exibe o popup
+                  if ((now - remDate) < 5 * 60000) {
+                      if (!shownRemindersRef.current.has(rem.id)) {
+                          window.api.showPopup(rem);
+                          shownRemindersRef.current.add(rem.id);
+                      }
+                  } else {
+                      // Passou de 5 minutos, marca como perdido
+                      await window.api.updateReminder(rem.id, 'perdido');
+                      changed = true;
+                  }
               }
           }
-      });
+      }
+      if (changed) loadData();
   };
 
   const expandTimeout = React.useRef(null);

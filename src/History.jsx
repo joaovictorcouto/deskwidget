@@ -67,7 +67,7 @@ function History() {
   };
 
   const agendados = reminders.filter(r => r.status === 'agendado' || r.status === 'pausado');
-  const historico = reminders.filter(r => r.status === 'concluido' || r.status === 'cancelado');
+  const historico = reminders.filter(r => r.status === 'concluido' || r.status === 'cancelado' || r.status === 'perdido');
 
   return (
     <div className="standalone-window">
