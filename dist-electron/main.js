@@ -98,9 +98,17 @@ function addTask(title) {
 function toggleTask(id, completed) {
 	return new Promise((resolve, reject) => {
 		const pos = completed ? 0 : Date.now();
-		const query = completed ? "UPDATE tasks SET completed = 1, completedAt = CURRENT_TIMESTAMP WHERE id = ?" : "UPDATE tasks SET completed = 0, completedAt = NULL, position = ? WHERE id = ?";
+		const query = completed ? "UPDATE tasks SET completed = 1, completedAt = datetime('now', 'localtime') WHERE id = ?" : "UPDATE tasks SET completed = 0, completedAt = NULL, position = ? WHERE id = ?";
 		const params = completed ? [id] : [pos, id];
 		db.run(query, params, (err) => {
+			if (err) reject(err);
+			else resolve(true);
+		});
+	});
+}
+function updateTaskTitle(id, title) {
+	return new Promise((resolve, reject) => {
+		db.run("UPDATE tasks SET title = ? WHERE id = ?", [title, id], (err) => {
 			if (err) reject(err);
 			else resolve(true);
 		});
@@ -154,6 +162,26 @@ function updateReminderStatus(id, status, newDatetime = null) {
 			else resolve(true);
 		});
 		else db.run("UPDATE reminders SET status = ? WHERE id = ?", [status, id], (err) => {
+			if (err) reject(err);
+			else resolve(true);
+		});
+	});
+}
+function updateReminderFull(id, title, datetime) {
+	return new Promise((resolve, reject) => {
+		db.run("UPDATE reminders SET title = ?, datetime = ? WHERE id = ?", [
+			title,
+			datetime,
+			id
+		], (err) => {
+			if (err) reject(err);
+			else resolve(true);
+		});
+	});
+}
+function deleteReminder(id) {
+	return new Promise((resolve, reject) => {
+		db.run("DELETE FROM reminders WHERE id = ?", [id], (err) => {
 			if (err) reject(err);
 			else resolve(true);
 		});
@@ -221,12 +249,12 @@ async function createWindow() {
 	const settings = await new Promise((res) => setTimeout(async () => res(await getSettings()), 200));
 	currentEdge = settings.edge || "right";
 	currentYPos = parseInt(settings.yPosition) || 0;
-	const { width, height } = electron.screen.getPrimaryDisplay().workAreaSize;
-	let startY = currentYPos === 0 ? Math.floor((height - COLLAPSED_HEIGHT) / 2) : currentYPos;
+	const { x, y, width, height } = electron.screen.getPrimaryDisplay().workArea;
+	let startY = currentYPos === 0 ? Math.floor(y + (height - COLLAPSED_HEIGHT) / 2) : currentYPos;
 	mainWindow = new electron.BrowserWindow({
 		width: COLLAPSED_WIDTH,
 		height: COLLAPSED_HEIGHT,
-		x: currentEdge === "left" ? 0 : width - COLLAPSED_WIDTH,
+		x: currentEdge === "left" ? x : x + width - COLLAPSED_WIDTH,
 		y: startY,
 		frame: false,
 		transparent: true,
@@ -240,14 +268,13 @@ async function createWindow() {
 			contextIsolation: true
 		}
 	});
-	if (process.env.VITE_DEV_SERVER_URL) {
-		mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
-		mainWindow.webContents.openDevTools({ mode: "detach" });
-	} else mainWindow.loadFile(node_path.default.join(__dirname, "../dist/index.html"));
+	if (process.env.VITE_DEV_SERVER_URL) mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
+	else mainWindow.loadFile(node_path.default.join(__dirname, "../dist/index.html"));
 }
 electron.app.whenReady().then(() => {
 	createWindow();
-	tray = new electron.Tray(electron.nativeImage.createFromDataURL("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAZUlEQVQ4T2NkoBAwUqifYdQAyDBGAQp/YGRk/E+W5gOMjIw/CQo+o4rGqAEwozEaQDSgQJ0gQ9jAABsYw2Qwg9GAITwAYWJAGDQQFwYDBuLCYMBAXBgMGIgLgwEDcWEwYCAuEEYHAAJ/OQsx3XpBAAAAAElFTkSuQmCC"));
+	const iconPath = process.env.VITE_DEV_SERVER_URL ? node_path.default.join(__dirname, "../public/logo-icon.png") : node_path.default.join(__dirname, "../dist/logo-icon.png");
+	tray = new electron.Tray(electron.nativeImage.createFromPath(iconPath));
 	const contextMenu = electron.Menu.buildFromTemplate([
 		{
 			label: "Configurações",
@@ -265,8 +292,34 @@ electron.app.whenReady().then(() => {
 	]);
 	tray.setToolTip("DeskWidget");
 	tray.setContextMenu(contextMenu);
+	tray.on("double-click", () => {
+		if (mainWindow) mainWindow.webContents.send("force-expand");
+	});
 	electron.app.on("activate", () => {
 		if (electron.BrowserWindow.getAllWindows().length === 0) createWindow();
+	});
+	electron.screen.on("display-metrics-changed", (event, display, changedMetrics) => {
+		if (mainWindow && display.id === electron.screen.getPrimaryDisplay().id) {
+			const isExpanded = mainWindow.getBounds().width > COLLAPSED_WIDTH;
+			const { x, y, width, height } = display.workArea;
+			if (isExpanded) mainWindow.setBounds({
+				x: currentEdge === "left" ? x : x + width - EXPANDED_WIDTH,
+				y,
+				width: EXPANDED_WIDTH,
+				height
+			});
+			else {
+				let finalY = currentYPos === 0 ? Math.floor(y + (height - COLLAPSED_HEIGHT) / 2) : currentYPos;
+				if (finalY > y + height - COLLAPSED_HEIGHT) finalY = y + height - COLLAPSED_HEIGHT;
+				if (finalY < y) finalY = y;
+				mainWindow.setBounds({
+					x: currentEdge === "left" ? x : x + width - COLLAPSED_WIDTH,
+					y: finalY,
+					width: COLLAPSED_WIDTH,
+					height: COLLAPSED_HEIGHT
+				});
+			}
+		}
 	});
 });
 electron.app.on("window-all-closed", () => {
@@ -280,10 +333,10 @@ electron.ipcMain.on("update-position", (e, edge, yPos) => {
 });
 electron.ipcMain.on("expand-window", () => {
 	if (mainWindow) {
-		const { width, height } = electron.screen.getPrimaryDisplay().workAreaSize;
+		const { x, y, width, height } = electron.screen.getPrimaryDisplay().workArea;
 		mainWindow.setBounds({
-			x: currentEdge === "left" ? 0 : width - EXPANDED_WIDTH,
-			y: 0,
+			x: currentEdge === "left" ? x : x + width - EXPANDED_WIDTH,
+			y,
 			width: EXPANDED_WIDTH,
 			height
 		});
@@ -291,21 +344,22 @@ electron.ipcMain.on("expand-window", () => {
 });
 electron.ipcMain.on("preview-edge", (e, tempEdge) => {
 	if (mainWindow) {
-		const { width, height } = electron.screen.getPrimaryDisplay().workAreaSize;
+		const { x, y, width, height } = electron.screen.getPrimaryDisplay().workArea;
 		mainWindow.setBounds({
-			x: tempEdge === "left" ? 0 : width - EXPANDED_WIDTH,
-			y: 0,
+			x: tempEdge === "left" ? x : x + width - EXPANDED_WIDTH,
+			y,
 			width: EXPANDED_WIDTH,
 			height
 		});
 	}
 });
 electron.ipcMain.on("collapse-window", () => {
+	if (settingsWindow) return;
 	if (mainWindow) {
-		const { width, height } = electron.screen.getPrimaryDisplay().workAreaSize;
-		let finalY = currentYPos === 0 ? Math.floor((height - COLLAPSED_HEIGHT) / 2) : currentYPos;
+		const { x, y, width, height } = electron.screen.getPrimaryDisplay().workArea;
+		let finalY = currentYPos === 0 ? Math.floor(y + (height - COLLAPSED_HEIGHT) / 2) : currentYPos;
 		mainWindow.setBounds({
-			x: currentEdge === "left" ? 0 : width - COLLAPSED_WIDTH,
+			x: currentEdge === "left" ? x : x + width - COLLAPSED_WIDTH,
 			y: finalY,
 			width: COLLAPSED_WIDTH,
 			height: COLLAPSED_HEIGHT
@@ -315,9 +369,13 @@ electron.ipcMain.on("collapse-window", () => {
 electron.ipcMain.handle("get-tasks", async () => await getTasks());
 electron.ipcMain.handle("add-task", async (event, title) => await addTask(title));
 electron.ipcMain.handle("toggle-task", async (event, id, completed) => await toggleTask(id, completed));
+electron.ipcMain.handle("update-task-title", async (event, id, title) => await updateTaskTitle(id, title));
+electron.ipcMain.handle("reorder-tasks", async (event, ids) => await reorderTasks(ids));
 electron.ipcMain.handle("get-reminders", async () => await getReminders());
 electron.ipcMain.handle("add-reminder", async (event, title, datetime) => await addReminder(title, datetime));
 electron.ipcMain.handle("update-reminder", async (event, id, status, newDatetime) => await updateReminderStatus(id, status, newDatetime));
+electron.ipcMain.handle("update-reminder-full", async (event, id, title, datetime) => await updateReminderFull(id, title, datetime));
+electron.ipcMain.handle("delete-reminder", async (event, id) => await deleteReminder(id));
 electron.ipcMain.handle("clear-history", async () => await clearHistory());
 electron.ipcMain.handle("get-settings", async () => await getSettings());
 electron.ipcMain.handle("update-setting", async (event, key, value) => {
@@ -329,13 +387,16 @@ electron.ipcMain.handle("update-setting", async (event, key, value) => {
 	if (key === "edge") {
 		currentEdge = value;
 		if (mainWindow) {
-			const { width, height } = electron.screen.getPrimaryDisplay().workAreaSize;
-			const finalY = currentYPos === 0 ? Math.floor((height - COLLAPSED_HEIGHT) / 2) : currentYPos;
+			const { x, y, width, height } = electron.screen.getPrimaryDisplay().workArea;
+			const isCurrentlyExpanded = mainWindow.getBounds().width > COLLAPSED_WIDTH;
+			const targetWidth = isCurrentlyExpanded ? EXPANDED_WIDTH : COLLAPSED_WIDTH;
+			const targetHeight = isCurrentlyExpanded ? height : COLLAPSED_HEIGHT;
+			const finalY = currentYPos === 0 || isCurrentlyExpanded ? isCurrentlyExpanded ? y : Math.floor(y + (height - COLLAPSED_HEIGHT) / 2) : currentYPos;
 			mainWindow.setBounds({
-				x: currentEdge === "left" ? 0 : width - COLLAPSED_WIDTH,
+				x: currentEdge === "left" ? x : x + width - targetWidth,
 				y: finalY,
-				width: COLLAPSED_WIDTH,
-				height: COLLAPSED_HEIGHT
+				width: targetWidth,
+				height: targetHeight
 			});
 		}
 	}
@@ -347,29 +408,31 @@ electron.ipcMain.handle("reset-settings", async () => {
 	if (mainWindow) mainWindow.webContents.send("settings-updated");
 	return true;
 });
-electron.ipcMain.handle("reorder-tasks", async (event, taskIds) => {
-	return await reorderTasks(taskIds);
-});
 var settingsWindow = null;
 function openSettingsWindow() {
+	if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("settings-opened");
 	if (settingsWindow) {
 		settingsWindow.focus();
 		return;
 	}
 	settingsWindow = new electron.BrowserWindow({
 		width: 400,
-		height: 700,
+		height: 630,
 		frame: false,
 		transparent: true,
 		webPreferences: { preload: node_path.default.join(__dirname, "preload.js") }
 	});
 	const url = process.env.VITE_DEV_SERVER_URL ? `${process.env.VITE_DEV_SERVER_URL}#/settings` : `file://${node_path.default.join(__dirname, "../dist/index.html")}#/settings`;
 	settingsWindow.loadURL(url);
-	settingsWindow.on("closed", () => settingsWindow = null);
+	settingsWindow.on("closed", () => {
+		settingsWindow = null;
+		if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("settings-closed");
+	});
 }
 electron.ipcMain.on("open-settings", openSettingsWindow);
 var historyWindow = null;
 function openHistoryWindow() {
+	if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("history-opened");
 	if (historyWindow) {
 		historyWindow.focus();
 		return;
@@ -383,7 +446,10 @@ function openHistoryWindow() {
 	});
 	const url = process.env.VITE_DEV_SERVER_URL ? `${process.env.VITE_DEV_SERVER_URL}#/history` : `file://${node_path.default.join(__dirname, "../dist/index.html")}#/history`;
 	historyWindow.loadURL(url);
-	historyWindow.on("closed", () => historyWindow = null);
+	historyWindow.on("closed", () => {
+		historyWindow = null;
+		if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("history-closed");
+	});
 }
 electron.ipcMain.on("open-history", openHistoryWindow);
 var popupWindow = null;

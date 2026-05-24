@@ -83,12 +83,21 @@ export function toggleTask(id, completed) {
   return new Promise((resolve, reject) => {
     const pos = completed ? 0 : Date.now(); // if unchecking, send to bottom
     const query = completed 
-      ? "UPDATE tasks SET completed = 1, completedAt = CURRENT_TIMESTAMP WHERE id = ?"
+      ? "UPDATE tasks SET completed = 1, completedAt = datetime('now', 'localtime') WHERE id = ?"
       : "UPDATE tasks SET completed = 0, completedAt = NULL, position = ? WHERE id = ?";
     
     const params = completed ? [id] : [pos, id];
     
     db.run(query, params, (err) => {
+      if (err) reject(err);
+      else resolve(true);
+    });
+  });
+}
+
+export function updateTaskTitle(id, title) {
+  return new Promise((resolve, reject) => {
+    db.run("UPDATE tasks SET title = ? WHERE id = ?", [title, id], (err) => {
       if (err) reject(err);
       else resolve(true);
     });
@@ -143,6 +152,24 @@ export function updateReminderStatus(id, status, newDatetime = null) {
         else resolve(true);
       });
     }
+  });
+}
+
+export function updateReminderFull(id, title, datetime) {
+  return new Promise((resolve, reject) => {
+    db.run("UPDATE reminders SET title = ?, datetime = ? WHERE id = ?", [title, datetime, id], (err) => {
+      if (err) reject(err);
+      else resolve(true);
+    });
+  });
+}
+
+export function deleteReminder(id) {
+  return new Promise((resolve, reject) => {
+    db.run("DELETE FROM reminders WHERE id = ?", [id], (err) => {
+      if (err) reject(err);
+      else resolve(true);
+    });
   });
 }
 

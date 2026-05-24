@@ -12,6 +12,7 @@ electron.contextBridge.exposeInMainWorld("api", {
 	getTasks: () => electron.ipcRenderer.invoke("get-tasks"),
 	addTask: (title) => electron.ipcRenderer.invoke("add-task", title),
 	toggleTask: (id, completed) => electron.ipcRenderer.invoke("toggle-task", id, completed),
+	updateTaskTitle: (id, title) => electron.ipcRenderer.invoke("update-task-title", id, title),
 	reorderTasks: (taskIds) => electron.ipcRenderer.invoke("reorder-tasks", taskIds),
 	getReminders: () => electron.ipcRenderer.invoke("get-reminders"),
 	addReminder: (title, datetime) => electron.ipcRenderer.invoke("add-reminder", title, datetime),
@@ -23,6 +24,26 @@ electron.contextBridge.exposeInMainWorld("api", {
 	onSettingsUpdated: (callback) => {
 		electron.ipcRenderer.on("settings-updated", callback);
 		return () => electron.ipcRenderer.removeListener("settings-updated", callback);
+	},
+	onSettingsOpened: (callback) => {
+		electron.ipcRenderer.on("settings-opened", callback);
+		return () => electron.ipcRenderer.removeListener("settings-opened", callback);
+	},
+	onSettingsClosed: (callback) => {
+		electron.ipcRenderer.on("settings-closed", callback);
+		return () => electron.ipcRenderer.removeListener("settings-closed", callback);
+	},
+	onHistoryOpened: (callback) => {
+		electron.ipcRenderer.on("history-opened", callback);
+		return () => electron.ipcRenderer.removeListener("history-opened", callback);
+	},
+	onHistoryClosed: (callback) => {
+		electron.ipcRenderer.on("history-closed", callback);
+		return () => electron.ipcRenderer.removeListener("history-closed", callback);
+	},
+	onForceExpand: (callback) => {
+		electron.ipcRenderer.on("force-expand", callback);
+		return () => electron.ipcRenderer.removeListener("force-expand", callback);
 	}
 });
 //#endregion

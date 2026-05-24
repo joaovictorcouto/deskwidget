@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld('api', {
   getTasks: () => ipcRenderer.invoke('get-tasks'),
   addTask: (title) => ipcRenderer.invoke('add-task', title),
   toggleTask: (id, completed) => ipcRenderer.invoke('toggle-task', id, completed),
+  updateTaskTitle: (id, title) => ipcRenderer.invoke('update-task-title', id, title),
   reorderTasks: (taskIds) => ipcRenderer.invoke('reorder-tasks', taskIds),
 
   // Reminders
@@ -30,5 +31,25 @@ contextBridge.exposeInMainWorld('api', {
   onSettingsUpdated: (callback) => {
     ipcRenderer.on('settings-updated', callback);
     return () => ipcRenderer.removeListener('settings-updated', callback);
+  },
+  onSettingsOpened: (callback) => {
+    ipcRenderer.on('settings-opened', callback);
+    return () => ipcRenderer.removeListener('settings-opened', callback);
+  },
+  onSettingsClosed: (callback) => {
+    ipcRenderer.on('settings-closed', callback);
+    return () => ipcRenderer.removeListener('settings-closed', callback);
+  },
+  onHistoryOpened: (callback) => {
+    ipcRenderer.on('history-opened', callback);
+    return () => ipcRenderer.removeListener('history-opened', callback);
+  },
+  onHistoryClosed: (callback) => {
+    ipcRenderer.on('history-closed', callback);
+    return () => ipcRenderer.removeListener('history-closed', callback);
+  },
+  onForceExpand: (callback) => {
+    ipcRenderer.on('force-expand', callback);
+    return () => ipcRenderer.removeListener('force-expand', callback);
   },
 });

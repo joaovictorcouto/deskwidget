@@ -17,6 +17,12 @@ function Popup() {
     } catch (e) {
       console.error("Failed to parse reminder data", e);
     }
+    
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') window.api?.closeWindow();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
   const handleComplete = async () => {
@@ -70,9 +76,10 @@ function Popup() {
 
           {showOptions && (
             <div style={{ position: 'absolute', bottom: '100%', right: '0', marginBottom: '10px', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '8px', padding: '10px', width: '120px', boxShadow: '0 4px 12px rgba(0,0,0,0.5)' }}>
-              <div style={{ padding: '8px', cursor: 'pointer', fontSize: '0.9rem' }} onClick={() => handleSnooze(5)}>5 min</div>
-              <div style={{ padding: '8px', cursor: 'pointer', fontSize: '0.9rem' }} onClick={() => handleSnooze(15)}>15 min</div>
-              <div style={{ padding: '8px', cursor: 'pointer', fontSize: '0.9rem' }} onClick={() => handleSnooze(30)}>30 min</div>
+              <div className="time-picker-item" onClick={() => handleSnooze(5)}>5 min</div>
+              <div className="time-picker-item" onClick={() => handleSnooze(15)}>15 min</div>
+              <div className="time-picker-item" onClick={() => handleSnooze(30)}>30 min</div>
+              <div className="time-picker-item" onClick={() => handleSnooze(60)}>1 hora</div>
             </div>
           )}
         </div>

@@ -1,5 +1,12 @@
+/**
+ * VOCABULÁRIO PADRÃO DO PROJETO:
+ * - Painel Principal (ou Dashboard Principal): A janela expandida contendo tarefas e lembretes.
+ * - Dock Lateral: A barrinha recolhida (transparente) que fica aguardando o cursor do mouse.
+ * - Trilho de Movimento: A área total de arrasto vertical.
+ * - Puxador: A pequena barra que o usuário clica e arrasta para mover a posição vertical.
+ */
 import React, { useState, useEffect } from 'react';
-import { Settings, Plus, CheckCircle, Bell, ChevronDown, ChevronRight, GripVertical } from 'lucide-react';
+import { Settings, Plus, CheckCircle, Bell, ChevronDown, ChevronRight, GripVertical, Clock } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 
 function Widget() {
@@ -7,9 +14,14 @@ function Widget() {
   const [tasks, setTasks] = useState([]);
   const [reminders, setReminders] = useState([]);
   const [newTaskTitle, setNewTaskTitle] = useState('');
+  const [editingTaskId, setEditingTaskId] = useState(null);
+  const [editingTaskTitle, setEditingTaskTitle] = useState('');
   const [newReminderTitle, setNewReminderTitle] = useState('');
   const [newReminderDate, setNewReminderDate] = useState('');
   const [newReminderTime, setNewReminderTime] = useState('');
+  const isHoveredRef = React.useRef(false);
+  const isSettingsOpenRef = React.useRef(false);
+  const isHistoryOpenRef = React.useRef(false);
   const [edge, setEdge] = useState('right');
   const [yPos, setYPos] = useState(0);
 
@@ -41,6 +53,13 @@ function Widget() {
         checkReminders();
     }, 60000);
 
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    setNewReminderDate(`${year}-${month}-${day}`);
+    setNewReminderTime(`${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`);
+
     let removeListener;
     if (window.api?.onSettingsUpdated) {
       removeListener = window.api.onSettingsUpdated(() => {
@@ -48,11 +67,96 @@ function Widget() {
       });
     }
 
+    let removeOpenListener;
+    if (window.api?.onSettingsOpened) {
+      removeOpenListener = window.api.onSettingsOpened(() => {
+        isSettingsOpenRef.current = true;
+        setIsExpanded(true);
+        window.api?.expandWindow();
+      });
+    }
+
+    let removeCloseListener;
+    if (window.api?.onSettingsClosed) {
+      removeCloseListener = window.api.onSettingsClosed(() => {
+        isSettingsOpenRef.current = false;
+        if (!isHoveredRef.current && !isHistoryOpenRef.current) {
+          const delay = settings.delay ? parseInt(settings.delay) : 1000;
+          expandTimeout.current = setTimeout(() => {
+            if (!isHoveredRef.current && !isHistoryOpenRef.current) {
+              setIsExpanded(false);
+              window.api?.collapseWindow();
+            }
+          }, delay);
+        }
+      });
+    }
+
+    let removeHistoryOpenListener;
+    if (window.api?.onHistoryOpened) {
+      removeHistoryOpenListener = window.api.onHistoryOpened(() => {
+        isHistoryOpenRef.current = true;
+        setIsExpanded(true);
+        window.api?.expandWindow();
+      });
+    }
+
+    let removeHistoryCloseListener;
+    if (window.api?.onHistoryClosed) {
+      removeHistoryCloseListener = window.api.onHistoryClosed(() => {
+        isHistoryOpenRef.current = false;
+        if (!isHoveredRef.current && !isSettingsOpenRef.current) {
+          const delay = settings.delay ? parseInt(settings.delay) : 1000;
+          expandTimeout.current = setTimeout(() => {
+            if (!isHoveredRef.current && !isSettingsOpenRef.current) {
+              setIsExpanded(false);
+              window.api?.collapseWindow();
+            }
+          }, delay);
+        }
+      });
+    }
+
+    let removeForceExpand;
+    if (window.api?.onForceExpand) {
+      removeForceExpand = window.api.onForceExpand(() => {
+        setIsExpanded(true);
+        window.api?.expandWindow();
+        
+        if (!isHoveredRef.current && !isSettingsOpenRef.current && !isHistoryOpenRef.current) {
+          if (expandTimeout.current) clearTimeout(expandTimeout.current);
+          const delay = settings.delay ? parseInt(settings.delay) : 1000;
+          expandTimeout.current = setTimeout(() => {
+            if (!isHoveredRef.current && !isSettingsOpenRef.current && !isHistoryOpenRef.current) {
+              setIsExpanded(false);
+              window.api?.collapseWindow();
+            }
+          }, delay + 1500); // Dá um tempinho extra de 1.5s para o usuário mover o mouse até lá
+        }
+      });
+    }
+
+
+
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setIsExpanded(false);
+        window.api?.collapseWindow();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+
     return () => {
       clearInterval(interval);
       if (removeListener) removeListener();
+      if (removeOpenListener) removeOpenListener();
+      if (removeCloseListener) removeCloseListener();
+      if (removeHistoryOpenListener) removeHistoryOpenListener();
+      if (removeHistoryCloseListener) removeHistoryCloseListener();
+      if (removeForceExpand) removeForceExpand();
+      window.removeEventListener('keydown', handleKeyDown);
     };
-  }, []);
+  }, [isExpanded, settings.delay]);
   
   const checkReminders = async () => {
       if (!window.api) return;
@@ -78,6 +182,7 @@ function Widget() {
   const currentYPosRef = React.useRef(0);
 
   const handlePointerEnter = () => {
+    isHoveredRef.current = true;
     if (expandTimeout.current) clearTimeout(expandTimeout.current);
     if (!isExpanded && !isDraggingRef.current) {
       setIsExpanded(true);
@@ -86,10 +191,11 @@ function Widget() {
   };
 
   const handlePointerLeave = () => {
-    if (isDraggingRef.current) return;
+    isHoveredRef.current = false;
+    if (isDraggingRef.current || isSettingsOpenRef.current || isHistoryOpenRef.current) return;
     const delay = settings.delay ? parseInt(settings.delay) : 1000;
     expandTimeout.current = setTimeout(() => {
-      if (isExpanded) {
+      if (isExpanded && !isSettingsOpenRef.current && !isHistoryOpenRef.current) {
         setIsExpanded(false);
         window.api?.collapseWindow();
       }
@@ -112,8 +218,8 @@ function Widget() {
     
     const deltaY = e.screenY - dragStartMouseY.current;
     let newYPos = dragStartYPos.current + deltaY;
-    if (newYPos < 0) newYPos = 0;
-    if (newYPos > window.innerHeight - 150) newYPos = window.innerHeight - 150;
+    if (newYPos < 52) newYPos = 52; // Limite superior ajustado (rail começa no 50px)
+    if (newYPos > window.innerHeight - 192) newYPos = window.innerHeight - 192; // Limite inferior ajustado
     
     currentYPosRef.current = newYPos;
     setYPos(newYPos);
@@ -146,10 +252,26 @@ function Widget() {
   };
 
   const handleAddTask = async (e) => {
-    if (e.key === 'Enter' && newTaskTitle.trim()) {
-      await window.api?.addTask(newTaskTitle);
-      setNewTaskTitle('');
-      loadData();
+    if (e.key === 'Enter' && newTaskTitle.trim() !== '') {
+      if (window.api) {
+        await window.api.addTask(newTaskTitle);
+        setNewTaskTitle('');
+        loadData();
+      }
+    }
+  };
+
+  const handleUpdateTaskTitle = async (id) => {
+    if (editingTaskTitle.trim() !== '') {
+      if (window.api) {
+        await window.api.updateTaskTitle(id, editingTaskTitle);
+        setEditingTaskId(null);
+        setEditingTaskTitle('');
+        loadData();
+      }
+    } else {
+      setEditingTaskId(null);
+      setEditingTaskTitle('');
     }
   };
 
@@ -159,27 +281,39 @@ function Widget() {
   };
 
   const handleAddReminder = async () => {
-    if (newReminderTitle && newReminderDate && newReminderTime) {
-      const datetime = `${newReminderDate}T${newReminderTime}`;
-      await window.api?.addReminder(newReminderTitle, datetime);
+    if (!newReminderTitle || !newReminderDate || !newReminderTime) return;
+    const dt = new Date(`${newReminderDate}T${newReminderTime}`);
+    if (dt < new Date()) {
+      alert("Não é possível agendar um lembrete no passado.");
+      return;
+    }
+    if (window.api) {
+      await window.api.addReminder(newReminderTitle, dt.toISOString());
       setNewReminderTitle('');
-      setNewReminderDate('');
-      setNewReminderTime('');
+      
+      const now = new Date();
+      setNewReminderDate(now.toISOString().split('T')[0]);
+      setNewReminderTime(`${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`);
+      
       loadData();
+      openHistory();
     }
   };
 
-  const openSettings = () => window.api?.openSettings();
+
+  const openSettings = () => {
+    isSettingsOpenRef.current = true;
+    window.api?.openSettings();
+  };
   const openHistory = () => window.api?.openHistory();
 
   const pendingTasks = tasks.filter(t => !t.completed);
-  const completedTasks = tasks.filter(t => t.completed).sort((a, b) => {
-    if (a.completedAt && b.completedAt) {
-      return new Date(b.completedAt) - new Date(a.completedAt);
-    }
-    return b.id - a.id;
-  });
-  const nextReminders = reminders.filter(r => r.status === 'agendado' && new Date(r.datetime) >= new Date());
+  const completedTasks = tasks.filter(t => t.completed).sort((a, b) => new Date(b.completedAt) - new Date(a.completedAt));
+  
+  const nextReminders = reminders
+    .filter(r => r.status === 'agendado' && new Date(r.datetime) > new Date())
+    .sort((a, b) => new Date(a.datetime) - new Date(b.datetime))
+    .slice(0, 3);
 
   const [isCompletedCollapsed, setIsCompletedCollapsed] = useState(true);
 
@@ -223,13 +357,33 @@ function Widget() {
   const showTasks = settings.enableTasks !== 'false';
   const showReminders = settings.enableReminders !== 'false';
   const opacity = settings.opacity ? parseInt(settings.opacity) / 100 : 0.9;
+  const expandedOpacity = settings.expandedOpacity ? parseInt(settings.expandedOpacity) / 100 : 1.0;
 
   return (
     <div className="app-container" style={{ justifyContent: edge === 'left' ? 'flex-start' : 'flex-end' }} onPointerEnter={handlePointerEnter} onPointerLeave={handlePointerLeave}>
       {!isExpanded ? (
         <div className={`collapsed-bar edge-${edge}`} style={{ backgroundColor: `rgba(30, 30, 40, ${opacity})` }} />
       ) : (
-      <div className="sidebar" style={{ position: 'relative' }}>
+      <div className="sidebar" style={{ 
+        position: 'relative', 
+        paddingRight: edge === 'right' ? '14px' : '0', 
+        paddingLeft: edge === 'left' ? '14px' : '0',
+        backgroundColor: `rgba(var(--bg-sidebar-rgb), ${expandedOpacity})`
+      }}>
+        {/* Trilho de arrasto dedicado */}
+        <div 
+          className="drag-rail"
+          style={{
+            position: 'absolute',
+            top: '50px',
+            bottom: '40px',
+            [edge === 'right' ? 'right' : 'left']: '2px',
+            width: '10px',
+            backgroundColor: 'rgba(255, 255, 255, 0.04)',
+            borderRadius: '5px',
+            zIndex: 99
+          }}
+        />
         <div 
           className="drag-handle" 
           onPointerDown={handlePointerDown}
@@ -237,7 +391,8 @@ function Widget() {
           onPointerUp={handlePointerUp}
           style={{ 
             top: yPos === 0 ? 'calc(50vh - 75px)' : yPos, 
-            [edge === 'right' ? 'left' : 'right']: '4px' 
+            [edge === 'right' ? 'right' : 'left']: '4px',
+            zIndex: 100
           }} 
         />
         <div className="header" style={{ padding: '10px 15px', display: 'flex', alignItems: 'center' }}>
@@ -262,7 +417,7 @@ function Widget() {
                     {pendingTasks.map((task, index) => (
                       <Draggable key={task.id.toString()} draggableId={task.id.toString()} index={index}>
                         {(provided) => (
-                          <label 
+                          <div 
                             className="task-item"
                             ref={provided.innerRef}
                             {...provided.draggableProps}
@@ -276,8 +431,36 @@ function Widget() {
                               checked={false}
                               onChange={() => handleToggleTask(task.id, false)}
                             />
-                            <span className="task-title" style={{ flex: 1 }}>{task.title}</span>
-                          </label>
+                            {editingTaskId === task.id ? (
+                              <input
+                                autoFocus
+                                type="text"
+                                className="add-task-input"
+                                style={{ flex: 1, padding: '4px 8px', fontSize: '0.85rem' }}
+                                value={editingTaskTitle}
+                                onChange={(e) => setEditingTaskTitle(e.target.value)}
+                                onBlur={() => handleUpdateTaskTitle(task.id)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') handleUpdateTaskTitle(task.id);
+                                  if (e.key === 'Escape') {
+                                    setEditingTaskId(null);
+                                    setEditingTaskTitle('');
+                                  }
+                                }}
+                              />
+                            ) : (
+                              <span 
+                                className="task-title" 
+                                style={{ flex: 1, cursor: 'text' }}
+                                onClick={() => {
+                                  setEditingTaskId(task.id);
+                                  setEditingTaskTitle(task.title);
+                                }}
+                              >
+                                {task.title}
+                              </span>
+                            )}
+                          </div>
                         )}
                       </Draggable>
                     ))}
@@ -309,18 +492,46 @@ function Widget() {
             {!isCompletedCollapsed && (
               <div className="task-list" style={{ opacity: 0.6 }}>
                 {completedTasks.map(task => (
-                  <label key={task.id} className="task-item">
+                  <div key={task.id} className="task-item">
                     <input 
                       type="checkbox" 
                       className="task-checkbox" 
                       checked={true}
                       onChange={() => handleToggleTask(task.id, true)}
                     />
-                    <span className="task-title completed" style={{ flex: 1 }}>{task.title}</span>
+                    {editingTaskId === task.id ? (
+                      <input
+                        autoFocus
+                        type="text"
+                        className="add-task-input"
+                        style={{ flex: 1, padding: '4px 8px', fontSize: '0.85rem' }}
+                        value={editingTaskTitle}
+                        onChange={(e) => setEditingTaskTitle(e.target.value)}
+                        onBlur={() => handleUpdateTaskTitle(task.id)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleUpdateTaskTitle(task.id);
+                          if (e.key === 'Escape') {
+                            setEditingTaskId(null);
+                            setEditingTaskTitle('');
+                          }
+                        }}
+                      />
+                    ) : (
+                      <span 
+                        className="task-title completed" 
+                        style={{ flex: 1, cursor: 'text' }}
+                        onClick={() => {
+                          setEditingTaskId(task.id);
+                          setEditingTaskTitle(task.title);
+                        }}
+                      >
+                        {task.title}
+                      </span>
+                    )}
                     <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
                       {formatCompletedDate(task.completedAt)}
                     </span>
-                  </label>
+                  </div>
                 ))}
               </div>
             )}
@@ -358,12 +569,15 @@ function Widget() {
               </div>
               <div style={{flex: 1}}>
                 <label className="form-label">HORA</label>
-                <input 
-                  type="time" 
-                  className="form-control"
-                  value={newReminderTime}
-                  onChange={e => setNewReminderTime(e.target.value)} 
-                />
+                <div style={{ display: 'flex', gap: '5px' }}>
+                  <input 
+                    type="time" 
+                    className="form-control" 
+                    value={newReminderTime} 
+                    onChange={e => setNewReminderTime(e.target.value)} 
+                    style={{ flex: 1 }}
+                  />
+                </div>
               </div>
             </div>
             <button className="btn-primary" onClick={handleAddReminder} style={{ marginBottom: '20px' }}>
@@ -386,9 +600,11 @@ function Widget() {
         </div>
         )}
 
-        <div className="footer" style={{ padding: '10px 20px', fontSize: '0.65rem', color: 'var(--text-muted)', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between' }}>
-          <span>DOCK EXPANDIDO • SINCRONIZADO HÁ 1M</span>
-          <div style={{ display: 'flex', gap: '4px' }}>
+        <div className="footer" style={{ padding: '10px 20px', fontSize: '0.65rem', color: 'var(--text-muted)', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', whiteSpace: 'nowrap', overflow: 'hidden' }}>
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            📋 {tasks.filter(t => t.completed).length} de {tasks.length} concluídas &nbsp;•&nbsp; 🔔 {nextReminders.length > 0 ? `Próximo: ${nextReminders.sort((a,b) => new Date(a.datetime) - new Date(b.datetime))[0].title}` : 'Nenhum lembrete'}
+          </span>
+          <div style={{ display: 'flex', gap: '4px', flexShrink: 0, marginLeft: '10px' }}>
             <span style={{width: '6px', height: '6px', borderRadius: '50%', backgroundColor: 'var(--success)', display: 'inline-block'}}></span>
             <span style={{width: '6px', height: '6px', borderRadius: '50%', backgroundColor: 'var(--primary)', display: 'inline-block'}}></span>
           </div>

@@ -15,14 +15,13 @@ function Settings() {
     };
     loadSettings();
 
-    let removeListener;
-    if (window.api?.onSettingsUpdated) {
-      removeListener = window.api.onSettingsUpdated(() => {
-        loadSettings();
-      });
-    }
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') window.api?.closeWindow();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+
     return () => {
-      if (removeListener) removeListener();
+      window.removeEventListener('keydown', handleKeyDown);
     };
   }, []);
 
@@ -39,8 +38,12 @@ function Settings() {
           await window.api.updateSetting(key, localSettings[key]);
         }
       }
+      
+      // Atualizar o estado da memória local para que novos salvamentos funcionem
+      const updatedSettings = await window.api.getSettings();
+      setSettings(updatedSettings);
+      setLocalSettings(updatedSettings);
     }
-    close();
   };
 
   const resetDefaults = async () => {
@@ -59,31 +62,43 @@ function Settings() {
           <img src="/logo-icon.png" alt="Logo" style={{ height: '18px', marginRight: '8px', objectFit: 'contain' }} onError={(e) => e.target.style.display = 'none'} />
           <span style={{ fontSize: '0.9rem', fontWeight: 600 }}>Configurações</span>
         </div>
-        <button className="icon-btn" onClick={close} style={{ opacity: 0.7 }}>×</button>
+        <button className="close-btn" onClick={close}><X size={18} /></button>
       </div>
 
-      <div className="window-content" style={{ padding: '20px' }}>
+      <div className="window-content" style={{ padding: '15px 20px 5px 20px' }}>
         <div className="settings-section">
-          <h3>Módulos</h3>
+          <h3 style={{ fontSize: '0.9rem', marginBottom: '10px' }}>Módulos</h3>
           
           <div className="setting-item">
             <span>Lista de Tarefas</span>
             <div 
-              className={`toggle-switch ${localSettings.enableTasks !== 'false' ? 'on' : ''}`} 
-              onClick={() => updateLocalSetting('enableTasks', localSettings.enableTasks !== 'false' ? 'false' : 'true')}
-            />
+              className={`toggle-switch ${localSettings.enableTasks !== 'false' ? 'on' : ''}`}
+              onClick={() => {
+                // Impede desativar se o outro já estiver desativado
+                if (localSettings.enableTasks !== 'false' && localSettings.enableReminders === 'false') return;
+                setLocalSettings({...localSettings, enableTasks: localSettings.enableTasks === 'false' ? 'true' : 'false'});
+              }}
+            >
+              <div className="toggle-thumb"></div>
+            </div>
           </div>
           <div className="setting-item">
             <span>Agendador de Lembretes</span>
             <div 
-              className={`toggle-switch ${localSettings.enableReminders !== 'false' ? 'on' : ''}`} 
-              onClick={() => updateLocalSetting('enableReminders', localSettings.enableReminders !== 'false' ? 'false' : 'true')}
-            />
+              className={`toggle-switch ${localSettings.enableReminders !== 'false' ? 'on' : ''}`}
+              onClick={() => {
+                // Impede desativar se o outro já estiver desativado
+                if (localSettings.enableReminders !== 'false' && localSettings.enableTasks === 'false') return;
+                setLocalSettings({...localSettings, enableReminders: localSettings.enableReminders === 'false' ? 'true' : 'false'});
+              }}
+            >
+              <div className="toggle-thumb"></div>
+            </div>
           </div>
         </div>
 
-        <div style={{ marginBottom: '25px' }}>
-          <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem', marginBottom: '15px' }}>
+        <div style={{ marginBottom: '15px' }}>
+          <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem', marginBottom: '10px' }}>
             <Palette size={16} /> Aparência
           </h3>
           
@@ -115,19 +130,32 @@ function Settings() {
             </div>
           </div>
 
-          <div className="setting-item">
-            <span>Opacidade do Painel Traseiro</span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <input 
-                type="range" 
-                min="10" 
-                max="100" 
-                value={localSettings.opacity || 90} 
-                onChange={(e) => updateLocalSetting('opacity', e.target.value)}
-                style={{ width: '100px', cursor: 'pointer' }}
-              />
-              <span style={{ fontSize: '0.8rem', width: '30px', textAlign: 'right' }}>{localSettings.opacity || 90}%</span>
+          <div className="setting-item" style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', marginBottom: '10px' }}>
+              <span>Opacidade do Dock Lateral</span>
+              <span>{localSettings.opacity || 90}%</span>
             </div>
+            <input 
+              type="range" 
+              min="10" max="100" 
+              value={localSettings.opacity || 90}
+              onChange={(e) => setLocalSettings({...localSettings, opacity: e.target.value})}
+              style={{ width: '100%' }}
+            />
+          </div>
+
+          <div className="setting-item" style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', marginBottom: '10px' }}>
+              <span>Opacidade do Painel Principal</span>
+              <span>{localSettings.expandedOpacity || 100}%</span>
+            </div>
+            <input 
+              type="range" 
+              min="10" max="100" 
+              value={localSettings.expandedOpacity || 100}
+              onChange={(e) => setLocalSettings({...localSettings, expandedOpacity: e.target.value})}
+              style={{ width: '100%' }}
+            />
           </div>
 
           <div className="setting-item">
@@ -142,9 +170,9 @@ function Settings() {
           </div>
         </div>
 
-        <div className="settings-section" style={{ borderBottom: 'none' }}>
-          <h3>Sistema</h3>
-          <div className="setting-item">
+        <div className="settings-section" style={{ borderBottom: 'none', marginBottom: 0 }}>
+          <h3 style={{ fontSize: '0.9rem', marginBottom: '10px' }}>Sistema</h3>
+          <div className="setting-item" style={{ marginBottom: 0 }}>
             <span>Iniciar com o Windows</span>
             <div 
               className={`toggle-switch ${localSettings.startOnWindows === 'true' ? 'on' : ''}`}
