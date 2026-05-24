@@ -609,6 +609,13 @@ function Widget() {
                 </div>
               </div>
             </div>
+            
+            {reminders.some(r => (r.status === 'agendado' || r.status === 'pausado') && r.datetime.startsWith(newReminderDate) && r.datetime.includes('T' + newReminderTime)) && (
+              <div style={{ color: 'var(--danger)', fontSize: '0.7rem', marginBottom: '10px', marginTop: '-5px' }}>
+                ⚠️ Já existe um lembrete nesse horário.
+              </div>
+            )}
+            
             <button className="btn-primary" onClick={handleAddReminder} style={{ marginBottom: '20px' }}>
               <Bell size={16} /> Agendar Lembrete
             </button>
@@ -630,10 +637,20 @@ function Widget() {
         )}
 
         <div className="footer" style={{ padding: '10px 20px', fontSize: '0.65rem', color: 'var(--text-muted)', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', whiteSpace: 'nowrap', overflow: 'hidden' }}>
-          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            📋 {tasks.filter(t => t.completed).length} de {tasks.length} concluídas &nbsp;•&nbsp; 🔔 {nextReminders.length > 0 ? `Próximo: ${nextReminders.sort((a,b) => new Date(a.datetime) - new Date(b.datetime))[0].title}` : 'Nenhum lembrete'}
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', display: 'flex', gap: '15px' }}>
+            <span>📝 {tasks.filter(t => t.completed).length}/{tasks.length} concluídas</span>
+            <span>🔔 {reminders.filter(r => r.status === 'agendado' || r.status === 'pausado').length} pendentes</span>
+            {reminders.some(r => r.status === 'perdido') && (
+              <span 
+                className="pulse-error" 
+                style={{ color: 'var(--danger)', cursor: 'pointer', fontWeight: 'bold' }}
+                onClick={() => { window.api?.showHistoryTab('historico') }} // Usaremos IPC para abrir focado
+              >
+                ⚠️ {reminders.filter(r => r.status === 'perdido').length} Falhas
+              </span>
+            )}
           </span>
-          <div style={{ display: 'flex', gap: '4px', flexShrink: 0, marginLeft: '10px' }}>
+          <div style={{ display: 'flex', gap: '4px', flexShrink: 0, marginLeft: '10px', alignItems: 'center' }}>
             <span style={{width: '6px', height: '6px', borderRadius: '50%', backgroundColor: 'var(--success)', display: 'inline-block'}}></span>
             <span style={{width: '6px', height: '6px', borderRadius: '50%', backgroundColor: 'var(--primary)', display: 'inline-block'}}></span>
           </div>

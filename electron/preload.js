@@ -8,6 +8,8 @@ contextBridge.exposeInMainWorld('api', {
   updatePosition: (edge, yPos) => ipcRenderer.send('update-position', edge, yPos),
   openSettings: () => ipcRenderer.send('open-settings'),
   openHistory: () => ipcRenderer.send('open-history'),
+  showHistoryTab: (tab) => ipcRenderer.send('show-history-tab', tab),
+  onHistoryTab: (callback) => ipcRenderer.on('set-history-tab', (event, tab) => callback(tab)),
   showPopup: (reminder) => ipcRenderer.send('show-popup', reminder),
   closeWindow: () => ipcRenderer.send('close-window'),
 

@@ -7,6 +7,8 @@ electron.contextBridge.exposeInMainWorld("api", {
 	updatePosition: (edge, yPos) => electron.ipcRenderer.send("update-position", edge, yPos),
 	openSettings: () => electron.ipcRenderer.send("open-settings"),
 	openHistory: () => electron.ipcRenderer.send("open-history"),
+	showHistoryTab: (tab) => electron.ipcRenderer.send("show-history-tab", tab),
+	onHistoryTab: (callback) => electron.ipcRenderer.on("set-history-tab", (event, tab) => callback(tab)),
 	showPopup: (reminder) => electron.ipcRenderer.send("show-popup", reminder),
 	closeWindow: () => electron.ipcRenderer.send("close-window"),
 	getTasks: () => electron.ipcRenderer.invoke("get-tasks"),

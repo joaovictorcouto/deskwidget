@@ -1,6 +1,31 @@
 import { app, BrowserWindow, ipcMain, screen, Tray, Menu, nativeImage } from 'electron';
 import path from 'node:path';
+import fs from 'node:fs';
 import * as db from './database.js';
+
+const configPath = path.join(app.getPath('userData'), 'window-config.json');
+
+function getWindowConfig() {
+  try {
+    if (fs.existsSync(configPath)) {
+      return JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    }
+  } catch (e) {
+    console.error('Error reading window config', e);
+  }
+  return {};
+}
+
+function saveWindowConfig(name, bounds) {
+  const config = getWindowConfig();
+  config[name] = bounds;
+  try {
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+  } catch (e) {
+    console.error('Error saving window config', e);
+  }
+}
+
 
 let mainWindow;
 let tray = null;
@@ -218,6 +243,9 @@ ipcMain.handle('update-setting', async (event, key, value) => {
 });
 ipcMain.handle('reset-settings', async () => {
   await db.resetSettings();
+  try {
+    if (fs.existsSync(configPath)) fs.unlinkSync(configPath);
+  } catch (e) {}
   if (mainWindow) {
     mainWindow.webContents.send('settings-updated');
   }
@@ -234,15 +262,27 @@ function openSettingsWindow() {
     settingsWindow.focus();
     return;
   }
+  const winConfig = getWindowConfig();
+  const savedSettings = winConfig.settingsWindow || {};
+  
   settingsWindow = new BrowserWindow({
-    width: 400,
-    height: 630,
+    width: savedSettings.width || 400,
+    height: savedSettings.height || 630,
+    minWidth: 350,
+    minHeight: 500,
     frame: false,
     transparent: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
     },
   });
+  
+  settingsWindow.on('resized', () => {
+    if (!settingsWindow) return;
+    const { width, height } = settingsWindow.getBounds();
+    saveWindowConfig('settingsWindow', { width, height });
+  });
+
   const url = process.env.VITE_DEV_SERVER_URL 
     ? `${process.env.VITE_DEV_SERVER_URL}#/settings` 
     : `file://${path.join(__dirname, '../dist/index.html')}#/settings`;
@@ -265,15 +305,27 @@ function openHistoryWindow() {
     historyWindow.focus();
     return;
   }
+  const winConfig = getWindowConfig();
+  const savedHistory = winConfig.historyWindow || {};
+
   historyWindow = new BrowserWindow({
-    width: 450,
-    height: 500,
+    width: savedHistory.width || 450,
+    height: savedHistory.height || 500,
+    minWidth: 400,
+    minHeight: 400,
     frame: false,
     transparent: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
     },
   });
+
+  historyWindow.on('resized', () => {
+    if (!historyWindow) return;
+    const { width, height } = historyWindow.getBounds();
+    saveWindowConfig('historyWindow', { width, height });
+  });
+
   const url = process.env.VITE_DEV_SERVER_URL 
     ? `${process.env.VITE_DEV_SERVER_URL}#/history` 
     : `file://${path.join(__dirname, '../dist/index.html')}#/history`;
@@ -286,36 +338,67 @@ function openHistoryWindow() {
   });
 }
 ipcMain.on('open-history', openHistoryWindow);
+ipcMain.on('show-history-tab', (event, tab) => {
+  openHistoryWindow();
+  if (historyWindow) {
+    // Send immediately if ready, or wait for did-finish-load
+    historyWindow.webContents.on('did-finish-load', () => {
+      historyWindow.webContents.send('set-history-tab', tab);
+    });
+    historyWindow.webContents.send('set-history-tab', tab);
+  }
+});
 
-let popupWindow = null;
+let popupWindows = [];
 ipcMain.on('show-popup', (event, reminder) => {
-  if (popupWindow) popupWindow.close();
+  // Prevent duplicate popups for the exact same reminder
+  if (popupWindows.find(pw => pw.reminderId === reminder.id)) return;
   
   const primaryDisplay = screen.getPrimaryDisplay();
-  const { width, height } = primaryDisplay.workAreaSize;
+  const { x, y, width, height } = primaryDisplay.workArea;
   const pWidth = 320;
   const pHeight = 210;
+  const gap = 10;
+  const margin = 20;
 
-  popupWindow = new BrowserWindow({
+  const index = popupWindows.length;
+  // Position stacked vertically from bottom up
+  const pY = y + height - margin - (pHeight + gap) * (index + 1) + gap;
+  const pX = x + width - pWidth - margin;
+
+  let newPopupWindow = new BrowserWindow({
     width: pWidth,
     height: pHeight,
-    x: width - pWidth - 20,
-    y: height - pHeight - 20,
+    x: pX,
+    y: pY,
     frame: false,
     transparent: true,
     alwaysOnTop: true,
+    resizable: false,
+    hasShadow: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
     },
   });
+  
+  newPopupWindow.reminderId = reminder.id;
   
   const encodedReminder = encodeURIComponent(JSON.stringify(reminder));
   const url = process.env.VITE_DEV_SERVER_URL 
     ? `${process.env.VITE_DEV_SERVER_URL}#/popup?data=${encodedReminder}` 
     : `file://${path.join(__dirname, '../dist/index.html')}#/popup?data=${encodedReminder}`;
   
-  popupWindow.loadURL(url);
-  popupWindow.on('closed', () => popupWindow = null);
+  newPopupWindow.loadURL(url);
+  newPopupWindow.on('closed', () => {
+    popupWindows = popupWindows.filter(pw => pw !== newPopupWindow);
+    // Recalculate positions for remaining popups to slide down
+    popupWindows.forEach((pw, i) => {
+      const newY = y + height - margin - (pHeight + gap) * (i + 1) + gap;
+      pw.setBounds({ x: pX, y: newY, width: pWidth, height: pHeight });
+    });
+  });
+
+  popupWindows.push(newPopupWindow);
 });
 
 ipcMain.on('close-window', (event) => {

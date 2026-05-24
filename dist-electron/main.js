@@ -23,6 +23,8 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 let electron = require("electron");
 let node_path = require("node:path");
 node_path = __toESM(node_path);
+let node_fs = require("node:fs");
+node_fs = __toESM(node_fs);
 let sqlite3 = require("sqlite3");
 sqlite3 = __toESM(sqlite3);
 //#region electron/database.js
@@ -237,6 +239,24 @@ function resetSettings() {
 }
 //#endregion
 //#region electron/main.js
+var configPath = node_path.default.join(electron.app.getPath("userData"), "window-config.json");
+function getWindowConfig() {
+	try {
+		if (node_fs.default.existsSync(configPath)) return JSON.parse(node_fs.default.readFileSync(configPath, "utf8"));
+	} catch (e) {
+		console.error("Error reading window config", e);
+	}
+	return {};
+}
+function saveWindowConfig(name, bounds) {
+	const config = getWindowConfig();
+	config[name] = bounds;
+	try {
+		node_fs.default.writeFileSync(configPath, JSON.stringify(config, null, 2));
+	} catch (e) {
+		console.error("Error saving window config", e);
+	}
+}
 var mainWindow;
 var tray = null;
 var EXPANDED_WIDTH = 350;
@@ -405,6 +425,9 @@ electron.ipcMain.handle("update-setting", async (event, key, value) => {
 });
 electron.ipcMain.handle("reset-settings", async () => {
 	await resetSettings();
+	try {
+		if (node_fs.default.existsSync(configPath)) node_fs.default.unlinkSync(configPath);
+	} catch (e) {}
 	if (mainWindow) mainWindow.webContents.send("settings-updated");
 	return true;
 });
@@ -415,12 +438,23 @@ function openSettingsWindow() {
 		settingsWindow.focus();
 		return;
 	}
+	const savedSettings = getWindowConfig().settingsWindow || {};
 	settingsWindow = new electron.BrowserWindow({
-		width: 400,
-		height: 630,
+		width: savedSettings.width || 400,
+		height: savedSettings.height || 630,
+		minWidth: 350,
+		minHeight: 500,
 		frame: false,
 		transparent: true,
 		webPreferences: { preload: node_path.default.join(__dirname, "preload.js") }
+	});
+	settingsWindow.on("resized", () => {
+		if (!settingsWindow) return;
+		const { width, height } = settingsWindow.getBounds();
+		saveWindowConfig("settingsWindow", {
+			width,
+			height
+		});
 	});
 	const url = process.env.VITE_DEV_SERVER_URL ? `${process.env.VITE_DEV_SERVER_URL}#/settings` : `file://${node_path.default.join(__dirname, "../dist/index.html")}#/settings`;
 	settingsWindow.loadURL(url);
@@ -437,12 +471,23 @@ function openHistoryWindow() {
 		historyWindow.focus();
 		return;
 	}
+	const savedHistory = getWindowConfig().historyWindow || {};
 	historyWindow = new electron.BrowserWindow({
-		width: 450,
-		height: 500,
+		width: savedHistory.width || 450,
+		height: savedHistory.height || 500,
+		minWidth: 400,
+		minHeight: 400,
 		frame: false,
 		transparent: true,
 		webPreferences: { preload: node_path.default.join(__dirname, "preload.js") }
+	});
+	historyWindow.on("resized", () => {
+		if (!historyWindow) return;
+		const { width, height } = historyWindow.getBounds();
+		saveWindowConfig("historyWindow", {
+			width,
+			height
+		});
 	});
 	const url = process.env.VITE_DEV_SERVER_URL ? `${process.env.VITE_DEV_SERVER_URL}#/history` : `file://${node_path.default.join(__dirname, "../dist/index.html")}#/history`;
 	historyWindow.loadURL(url);
@@ -452,26 +497,55 @@ function openHistoryWindow() {
 	});
 }
 electron.ipcMain.on("open-history", openHistoryWindow);
-var popupWindow = null;
+electron.ipcMain.on("show-history-tab", (event, tab) => {
+	openHistoryWindow();
+	if (historyWindow) {
+		historyWindow.webContents.on("did-finish-load", () => {
+			historyWindow.webContents.send("set-history-tab", tab);
+		});
+		historyWindow.webContents.send("set-history-tab", tab);
+	}
+});
+var popupWindows = [];
 electron.ipcMain.on("show-popup", (event, reminder) => {
-	if (popupWindow) popupWindow.close();
-	const { width, height } = electron.screen.getPrimaryDisplay().workAreaSize;
+	if (popupWindows.find((pw) => pw.reminderId === reminder.id)) return;
+	const { x, y, width, height } = electron.screen.getPrimaryDisplay().workArea;
 	const pWidth = 320;
 	const pHeight = 210;
-	popupWindow = new electron.BrowserWindow({
+	const gap = 10;
+	const margin = 20;
+	const index = popupWindows.length;
+	const pY = y + height - margin - 220 * (index + 1) + gap;
+	const pX = x + width - pWidth - margin;
+	let newPopupWindow = new electron.BrowserWindow({
 		width: pWidth,
 		height: pHeight,
-		x: width - pWidth - 20,
-		y: height - pHeight - 20,
+		x: pX,
+		y: pY,
 		frame: false,
 		transparent: true,
 		alwaysOnTop: true,
+		resizable: false,
+		hasShadow: false,
 		webPreferences: { preload: node_path.default.join(__dirname, "preload.js") }
 	});
+	newPopupWindow.reminderId = reminder.id;
 	const encodedReminder = encodeURIComponent(JSON.stringify(reminder));
 	const url = process.env.VITE_DEV_SERVER_URL ? `${process.env.VITE_DEV_SERVER_URL}#/popup?data=${encodedReminder}` : `file://${node_path.default.join(__dirname, "../dist/index.html")}#/popup?data=${encodedReminder}`;
-	popupWindow.loadURL(url);
-	popupWindow.on("closed", () => popupWindow = null);
+	newPopupWindow.loadURL(url);
+	newPopupWindow.on("closed", () => {
+		popupWindows = popupWindows.filter((pw) => pw !== newPopupWindow);
+		popupWindows.forEach((pw, i) => {
+			const newY = y + height - margin - 220 * (i + 1) + gap;
+			pw.setBounds({
+				x: pX,
+				y: newY,
+				width: pWidth,
+				height: pHeight
+			});
+		});
+	});
+	popupWindows.push(newPopupWindow);
 });
 electron.ipcMain.on("close-window", (event) => {
 	const win = electron.BrowserWindow.fromWebContents(event.sender);

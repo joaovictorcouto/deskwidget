@@ -5,10 +5,11 @@ function History() {
   const [activeTab, setActiveTab] = useState('agendados'); // 'agendados' or 'historico'
   const [reminders, setReminders] = useState([]);
   
-  const [editingId, setEditingId] = useState(null);
-  const [editTitle, setEditTitle] = useState('');
-  const [editDate, setEditDate] = useState('');
-  const [editTime, setEditTime] = useState('');
+  const [editingId, setEditingId] = React.useState(null);
+  const [cloningId, setCloningId] = React.useState(null);
+  const [editTitle, setEditTitle] = React.useState('');
+  const [editDate, setEditDate] = React.useState('');
+  const [editTime, setEditTime] = React.useState('');
 
   const loadData = async () => {
     if (window.api) {
@@ -66,8 +67,25 @@ function History() {
     }
   };
 
+  const saveClone = async () => {
+    if (!window.api) return;
+    const dt = new Date(`${editDate}T${editTime}`);
+    await window.api.addReminder(editTitle, dt.toISOString());
+    setCloningId(null);
+    loadData();
+  };
+
+  const startClone = (r) => {
+    setCloningId(r.id);
+    setEditTitle(r.title);
+    const d = new Date();
+    setEditDate(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
+    setEditTime(`${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`);
+  };
+
   const agendados = reminders.filter(r => r.status === 'agendado' || r.status === 'pausado');
-  const historico = reminders.filter(r => r.status === 'concluido' || r.status === 'cancelado' || r.status === 'perdido');
+  const falhas = reminders.filter(r => r.status === 'perdido');
+  const historico = reminders.filter(r => r.status === 'concluido' || r.status === 'cancelado');
 
   return (
     <div className="standalone-window">
@@ -136,6 +154,49 @@ function History() {
               </div>
             ))}
             {agendados.length === 0 && <p style={{color: 'var(--text-muted)'}}>Nenhum lembrete agendado.</p>}
+            
+            {falhas.length > 0 && (
+              <div style={{ marginTop: '20px' }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--danger)', fontWeight: 600 }}>⚠️ FALHAS / PERDIDOS</span>
+                <div style={{ marginTop: '10px' }}>
+                  {falhas.map(r => (
+                    <div key={r.id} className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', border: '1px solid rgba(255, 107, 107, 0.3)' }}>
+                      {cloningId === r.id ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%', padding: '10px 0' }}>
+                          <input type="text" className="form-control" value={editTitle} onChange={e => setEditTitle(e.target.value)} />
+                          <div style={{ display: 'flex', gap: '10px' }}>
+                            <input type="date" className="form-control" value={editDate} onChange={e => setEditDate(e.target.value)} style={{ flex: 1 }} />
+                            <input type="time" className="form-control" value={editTime} onChange={e => setEditTime(e.target.value)} style={{ flex: 1 }} />
+                          </div>
+                          <div style={{ display: 'flex', gap: '10px' }}>
+                            <button className="btn-primary" onClick={saveClone} style={{ flex: 1, padding: '8px' }}>Agendar Novo</button>
+                            <button className="btn-secondary" onClick={() => setCloningId(null)} style={{ flex: 1, padding: '8px' }}>Cancelar</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', width: '100%', alignItems: 'center', gap: '15px' }}>
+                          <div className="list-item-icon" style={{ color: 'var(--danger)' }}>
+                            <XCircle size={20} />
+                          </div>
+                          <div className="list-item-content" style={{ flex: 1 }}>
+                            <h4>{r.title}</h4>
+                            <p style={{ color: 'var(--danger)' }}>Perdido: {new Date(r.datetime).toLocaleString()}</p>
+                          </div>
+                          <div style={{ display: 'flex', gap: '5px' }}>
+                            <button className="icon-btn" onClick={() => startClone(r)} title="Clonar (Agendar Novamente)">
+                              <Clock size={16} />
+                            </button>
+                            <button className="icon-btn" onClick={() => deleteRem(r.id)} style={{ color: 'var(--danger)' }} title="Excluir">
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -152,14 +213,35 @@ function History() {
             </div>
             
             {historico.map(r => (
-              <div key={r.id} className="list-item">
-                <div className="list-item-icon" style={{ color: r.status === 'concluido' ? 'var(--success)' : 'var(--danger)' }}>
-                  {r.status === 'concluido' ? <CheckCircle size={20} /> : <XCircle size={20} />}
-                </div>
-                <div className="list-item-content">
-                  <h4 style={{ textDecoration: r.status === 'concluido' ? 'line-through' : 'none' }}>{r.title}</h4>
-                  <p>{r.status === 'concluido' ? 'Concluído em' : 'Cancelado em'} {new Date(r.datetime).toLocaleString()}</p>
-                </div>
+              <div key={r.id} className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+                {cloningId === r.id ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%', padding: '10px 0' }}>
+                    <input type="text" className="form-control" value={editTitle} onChange={e => setEditTitle(e.target.value)} />
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                      <input type="date" className="form-control" value={editDate} onChange={e => setEditDate(e.target.value)} style={{ flex: 1 }} />
+                      <input type="time" className="form-control" value={editTime} onChange={e => setEditTime(e.target.value)} style={{ flex: 1 }} />
+                    </div>
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                      <button className="btn-primary" onClick={saveClone} style={{ flex: 1, padding: '8px' }}>Agendar Novo</button>
+                      <button className="btn-secondary" onClick={() => setCloningId(null)} style={{ flex: 1, padding: '8px' }}>Cancelar</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', width: '100%', alignItems: 'center', gap: '15px' }}>
+                    <div className="list-item-icon" style={{ color: r.status === 'concluido' ? 'var(--success)' : 'var(--danger)' }}>
+                      {r.status === 'concluido' ? <CheckCircle size={20} /> : <XCircle size={20} />}
+                    </div>
+                    <div className="list-item-content" style={{ flex: 1 }}>
+                      <h4 style={{ textDecoration: r.status === 'concluido' ? 'line-through' : 'none' }}>{r.title}</h4>
+                      <p>{r.status === 'concluido' ? 'Concluído em' : 'Cancelado em'} {new Date(r.datetime).toLocaleString()}</p>
+                    </div>
+                    <div style={{ display: 'flex', gap: '5px' }}>
+                      <button className="icon-btn" onClick={() => startClone(r)} title="Clonar">
+                        <Clock size={16} />
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
             {historico.length === 0 && <p style={{color: 'var(--text-muted)'}}>Histórico vazio.</p>}

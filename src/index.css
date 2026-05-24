@@ -140,6 +140,14 @@ body {
   transform: translateY(1px) scale(0.95);
 }
 
+.pulse-error {
+  animation: pulse-error 1s infinite;
+}
+@keyframes pulse-error {
+  0% { opacity: 1; text-shadow: 0 0 5px rgba(255,107,107,0.5); }
+  50% { opacity: 0.5; text-shadow: 0 0 15px rgba(255,107,107,1); }
+  100% { opacity: 1; text-shadow: 0 0 5px rgba(255,107,107,0.5); }
+}
 /* Half Sections */
 .half-section {
   flex: 1;
