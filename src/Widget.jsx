@@ -48,10 +48,10 @@ function Widget() {
 
   useEffect(() => {
     loadData();
-    // Start interval to check for reminders every minute
+    // Start interval to check for reminders every 10 seconds (more precise)
     const interval = setInterval(() => {
         checkReminders();
-    }, 60000);
+    }, 10000);
 
     const now = new Date();
     const year = now.getFullYear();
@@ -158,6 +158,8 @@ function Widget() {
     };
   }, [isExpanded, settings.delay]);
   
+  const shownRemindersRef = React.useRef(new Set());
+  
   const checkReminders = async () => {
       if (!window.api) return;
       const r = await window.api.getReminders();
@@ -165,9 +167,12 @@ function Widget() {
       r.forEach(rem => {
           if (rem.status === 'agendado') {
               const remDate = new Date(rem.datetime);
-              // if time is less than 1 min difference
-              if (Math.abs(now - remDate) < 60000) {
-                  window.api.showPopup(rem);
+              // Verifica se chegou o horário exato ou passou até 5 minutos (para evitar trigger velho se PC desligar)
+              if (!shownRemindersRef.current.has(rem.id)) {
+                if (now >= remDate && (now - remDate) < 5 * 60000) {
+                    window.api.showPopup(rem);
+                    shownRemindersRef.current.add(rem.id);
+                }
               }
           }
       });
@@ -292,11 +297,13 @@ function Widget() {
       setNewReminderTitle('');
       
       const now = new Date();
-      setNewReminderDate(now.toISOString().split('T')[0]);
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      setNewReminderDate(`${year}-${month}-${day}`);
       setNewReminderTime(`${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`);
       
       loadData();
-      openHistory();
     }
   };
 
@@ -588,12 +595,12 @@ function Widget() {
               PRÓXIMOS
             </div>
             {nextReminders.map(r => (
-              <div key={r.id} className="list-item" style={{ padding: '10px', marginBottom: '8px' }}>
+              <div key={r.id} className="list-item" style={{ padding: '6px 10px', marginBottom: '6px', gap: '8px' }}>
                 <div className="list-item-content">
-                  <h4 style={{fontSize: '0.8rem', color: '#fff'}}>{r.title}</h4>
-                  <p>{new Date(r.datetime).toLocaleString()}</p>
+                  <h4 style={{fontSize: '0.75rem', color: '#fff', marginBottom: '2px'}}>{r.title}</h4>
+                  <p style={{fontSize: '0.65rem'}}>{new Date(r.datetime).toLocaleString()}</p>
                 </div>
-                <Bell size={14} color="var(--text-muted)" style={{marginLeft: 'auto'}}/>
+                <Bell size={12} color="var(--text-muted)" style={{marginLeft: 'auto'}}/>
               </div>
             ))}
           </div>

@@ -457,7 +457,7 @@ electron.ipcMain.on("show-popup", (event, reminder) => {
 	if (popupWindow) popupWindow.close();
 	const { width, height } = electron.screen.getPrimaryDisplay().workAreaSize;
 	const pWidth = 320;
-	const pHeight = 150;
+	const pHeight = 250;
 	popupWindow = new electron.BrowserWindow({
 		width: pWidth,
 		height: pHeight,

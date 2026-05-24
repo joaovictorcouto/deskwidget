@@ -196,6 +196,13 @@ body {
   font-size: 0.75rem;
   text-decoration: none;
   cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+.section-title-action:hover {
+  background-color: rgba(92, 133, 255, 0.1);
+  color: var(--primary-hover);
 }
 
 /* Tasks */
