@@ -7,7 +7,24 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "dist": "vite build && electron-builder --win"
+  },
+  "build": {
+    "appId": "com.deskwidget.app",
+    "productName": "DeskWidget",
+    "directories": {
+      "output": "dist-electron/release"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "public/logo-icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "runAfterFinish": true
+    }
   },
   "dependencies": {
     "@hello-pangea/dnd": "^18.0.1",

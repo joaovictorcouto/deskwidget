@@ -22,7 +22,8 @@ function Popup() {
         window.api.getSettings().then(settings => {
           if (settings.soundEnabled !== 'false') {
             const vol = settings.soundVolume ? parseInt(settings.soundVolume) / 100 : 0.8;
-            playNotificationSound(vol);
+            const type = settings.soundType || 'sino';
+            playNotificationSound(vol, type);
           }
         });
       }

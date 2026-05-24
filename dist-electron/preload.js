@@ -23,7 +23,10 @@ electron.contextBridge.exposeInMainWorld("api", {
 	reagendarPerdido: (id, title, datetime) => electron.ipcRenderer.invoke("reagendar-perdido", id, title, datetime),
 	deleteReminder: (id) => electron.ipcRenderer.invoke("delete-reminder", id),
 	clearHistory: () => electron.ipcRenderer.invoke("clear-history"),
-	onDataUpdated: (callback) => electron.ipcRenderer.on("data-updated", () => callback()),
+	onDataUpdated: (callback) => {
+		electron.ipcRenderer.on("data-updated", callback);
+		return () => electron.ipcRenderer.removeListener("data-updated", callback);
+	},
 	getSettings: () => electron.ipcRenderer.invoke("get-settings"),
 	updateSetting: (key, value) => electron.ipcRenderer.invoke("update-setting", key, value),
 	resetSettings: () => electron.ipcRenderer.invoke("reset-settings"),
