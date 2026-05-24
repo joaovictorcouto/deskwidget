@@ -97,6 +97,50 @@ function Settings() {
                 <h3 style={{ fontSize: '0.9rem', marginBottom: '10px' }}>Módulos</h3>
                 
                 <div className="setting-item">
+                  <span>Barra de Progresso Diária</span>
+                  <div 
+                    className={`toggle-switch ${localSettings.enableProgressBar === 'true' ? 'on' : ''}`}
+                    onClick={() => updateLocalSetting('enableProgressBar', localSettings.enableProgressBar === 'true' ? 'false' : 'true')}
+                  />
+                </div>
+
+                <div className="setting-item">
+                  <span>Pomodoro Timer</span>
+                  <div 
+                    className={`toggle-switch ${localSettings.enablePomodoro === 'true' ? 'on' : ''}`}
+                    onClick={() => updateLocalSetting('enablePomodoro', localSettings.enablePomodoro === 'true' ? 'false' : 'true')}
+                  />
+                </div>
+                {localSettings.enablePomodoro === 'true' && (
+                  <div style={{ marginLeft: '15px', paddingLeft: '15px', borderLeft: '2px solid var(--border)', marginBottom: '15px' }}>
+                    <div className="setting-item" style={{ marginBottom: '10px' }}>
+                      <span>Foco (min)</span>
+                      <input type="number" className="form-control" style={{ width: '70px', padding: '4px' }} 
+                             value={localSettings.pomodoroFocus || '25'} 
+                             onChange={(e) => updateLocalSetting('pomodoroFocus', e.target.value)} />
+                    </div>
+                    <div className="setting-item" style={{ marginBottom: '10px' }}>
+                      <span>Descanso (min)</span>
+                      <input type="number" className="form-control" style={{ width: '70px', padding: '4px' }} 
+                             value={localSettings.pomodoroBreak || '5'} 
+                             onChange={(e) => updateLocalSetting('pomodoroBreak', e.target.value)} />
+                    </div>
+                    <div className="setting-item" style={{ marginBottom: 0 }}>
+                      <span>Som de Alarme</span>
+                      <select className="form-control" style={{ width: '120px', padding: '4px' }}
+                              value={localSettings.pomodoroSound || 'sino'}
+                              onChange={(e) => updateLocalSetting('pomodoroSound', e.target.value)}>
+                        <option value="sino">Sino</option>
+                        <option value="suave">Toque Suave</option>
+                        <option value="bolha">Bolha Pop</option>
+                        <option value="marimba">Marimba</option>
+                        <option value="duplo">Toque Duplo</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
+
+                <div className="setting-item">
                   <span>Lista de Tarefas</span>
                   <div 
                     className={`toggle-switch ${localSettings.enableTasks !== 'false' ? 'on' : ''}`}
@@ -108,6 +152,7 @@ function Settings() {
                     <div className="toggle-thumb"></div>
                   </div>
                 </div>
+
                 <div className="setting-item">
                   <span>Agendador de Lembretes</span>
                   <div 
@@ -119,6 +164,22 @@ function Settings() {
                   >
                     <div className="toggle-thumb"></div>
                   </div>
+                </div>
+
+                <div className="setting-item">
+                  <span>Notas Rápidas</span>
+                  <div 
+                    className={`toggle-switch ${localSettings.enableNotes === 'true' ? 'on' : ''}`}
+                    onClick={() => updateLocalSetting('enableNotes', localSettings.enableNotes === 'true' ? 'false' : 'true')}
+                  />
+                </div>
+
+                <div className="setting-item">
+                  <span>Sistema de Tags coloridas</span>
+                  <div 
+                    className={`toggle-switch ${localSettings.enableTags === 'true' ? 'on' : ''}`}
+                    onClick={() => updateLocalSetting('enableTags', localSettings.enableTags === 'true' ? 'false' : 'true')}
+                  />
                 </div>
               </div>
 

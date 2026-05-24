@@ -15,17 +15,19 @@ contextBridge.exposeInMainWorld('api', {
 
   // Tasks
   getTasks: () => ipcRenderer.invoke('get-tasks'),
-  addTask: (title) => ipcRenderer.invoke('add-task', title),
+  addTask: (title, tag, tagColor) => ipcRenderer.invoke('add-task', title, tag, tagColor),
   toggleTask: (id, completed) => ipcRenderer.invoke('toggle-task', id, completed),
   updateTaskTitle: (id, title) => ipcRenderer.invoke('update-task-title', id, title),
+  deleteTask: (id) => ipcRenderer.invoke('delete-task', id),
+  updateTaskTag: (oldTag, newTag, newTagColor) => ipcRenderer.invoke('update-task-tag', oldTag, newTag, newTagColor),
   reorderTasks: (taskIds) => ipcRenderer.invoke('reorder-tasks', taskIds),
 
   // Reminders
   getReminders: () => ipcRenderer.invoke('get-reminders'),
-  addReminder: (title, datetime) => ipcRenderer.invoke('add-reminder', title, datetime),
+  addReminder: (title, datetime, recurrence) => ipcRenderer.invoke('add-reminder', title, datetime, recurrence),
   updateReminder: (id, status, newDatetime) => ipcRenderer.invoke('update-reminder', id, status, newDatetime),
-  updateReminderFull: (id, title, datetime) => ipcRenderer.invoke('update-reminder-full', id, title, datetime),
-  reagendarPerdido: (id, title, datetime) => ipcRenderer.invoke('reagendar-perdido', id, title, datetime),
+  updateReminderFull: (id, title, datetime, recurrence) => ipcRenderer.invoke('update-reminder-full', id, title, datetime, recurrence),
+  reagendarPerdido: (id, title, datetime, recurrence) => ipcRenderer.invoke('reagendar-perdido', id, title, datetime, recurrence),
   deleteReminder: (id) => ipcRenderer.invoke('delete-reminder', id),
   clearHistory: () => ipcRenderer.invoke('clear-history'),
   onDataUpdated: (callback) => {

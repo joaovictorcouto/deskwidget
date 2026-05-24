@@ -46,15 +46,19 @@ function initDb() {
     `);
 			db.run(`ALTER TABLE tasks ADD COLUMN position INTEGER DEFAULT 0`, (err) => {});
 			db.run(`ALTER TABLE tasks ADD COLUMN completedAt DATETIME`, (err) => {});
+			db.run(`ALTER TABLE tasks ADD COLUMN tag TEXT`, (err) => {});
+			db.run(`ALTER TABLE tasks ADD COLUMN tagColor TEXT`, (err) => {});
 			db.run(`
       CREATE TABLE IF NOT EXISTS reminders (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         title TEXT NOT NULL,
         datetime DATETIME NOT NULL,
-        status TEXT DEFAULT 'agendado', -- 'agendado', 'concluido', 'cancelado'
+        status TEXT DEFAULT 'agendado', -- 'agendado', 'concluido', 'cancelado', 'perdido'
+        recurrence TEXT, -- 'none', 'daily', 'weekly', 'monthly', 'yearly'
         createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `);
+			db.run(`ALTER TABLE reminders ADD COLUMN recurrence TEXT`, (err) => {});
 			db.run(`
       CREATE TABLE IF NOT EXISTS settings (
         key TEXT PRIMARY KEY,
@@ -68,6 +72,13 @@ function initDb() {
 					db.run("INSERT INTO settings (key, value) VALUES ('theme', 'escuro')");
 					db.run("INSERT INTO settings (key, value) VALUES ('delay', '1000')");
 					db.run("INSERT INTO settings (key, value) VALUES ('startOnWindows', 'false')");
+					db.run("INSERT INTO settings (key, value) VALUES ('enablePomodoro', 'false')");
+					db.run("INSERT INTO settings (key, value) VALUES ('enableNotes', 'false')");
+					db.run("INSERT INTO settings (key, value) VALUES ('enableProgressBar', 'false')");
+					db.run("INSERT INTO settings (key, value) VALUES ('enableTags', 'false')");
+					db.run("INSERT INTO settings (key, value) VALUES ('pomodoroFocus', '25')");
+					db.run("INSERT INTO settings (key, value) VALUES ('pomodoroBreak', '5')");
+					db.run("INSERT INTO settings (key, value) VALUES ('pomodoroSound', 'sino')");
 				}
 			});
 		});
@@ -77,22 +88,33 @@ function initDb() {
 }
 function getTasks() {
 	return new Promise((resolve, reject) => {
-		db.all("SELECT * FROM tasks ORDER BY completed ASC, position ASC, createdAt ASC", (err, rows) => {
+		db.all("SELECT * FROM tasks", (err, rows) => {
 			if (err) reject(err);
-			else resolve(rows);
+			else {
+				const pending = rows.filter((r) => !r.completed).sort((a, b) => a.position - b.position);
+				const completed = rows.filter((r) => r.completed).sort((a, b) => new Date(b.completedAt) - new Date(a.completedAt));
+				resolve([...pending, ...completed]);
+			}
 		});
 	});
 }
-function addTask(title) {
+function addTask(title, tag = null, tagColor = null) {
 	return new Promise((resolve, reject) => {
 		const pos = Date.now();
-		db.run("INSERT INTO tasks (title, completed, position) VALUES (?, 0, ?)", [title, pos], function(err) {
+		db.run("INSERT INTO tasks (title, completed, position, tag, tagColor) VALUES (?, 0, ?, ?, ?)", [
+			title,
+			pos,
+			tag,
+			tagColor
+		], function(err) {
 			if (err) reject(err);
 			else resolve({
 				id: this.lastID,
 				title,
 				completed: 0,
-				position: pos
+				position: pos,
+				tag,
+				tagColor
 			});
 		});
 	});
@@ -111,6 +133,26 @@ function toggleTask(id, completed) {
 function updateTaskTitle(id, title) {
 	return new Promise((resolve, reject) => {
 		db.run("UPDATE tasks SET title = ? WHERE id = ?", [title, id], (err) => {
+			if (err) reject(err);
+			else resolve(true);
+		});
+	});
+}
+function deleteTask(id) {
+	return new Promise((resolve, reject) => {
+		db.run("DELETE FROM tasks WHERE id = ?", [id], (err) => {
+			if (err) reject(err);
+			else resolve(true);
+		});
+	});
+}
+function updateTaskTag(oldTag, newTag, newTagColor) {
+	return new Promise((resolve, reject) => {
+		db.run("UPDATE tasks SET tag = ?, tagColor = ? WHERE tag = ?", [
+			newTag,
+			newTagColor,
+			oldTag
+		], (err) => {
 			if (err) reject(err);
 			else resolve(true);
 		});
@@ -140,22 +182,47 @@ function getReminders() {
 		});
 	});
 }
-function addReminder(title, datetime) {
+function addReminder(title, datetime, recurrence = "none") {
 	return new Promise((resolve, reject) => {
-		db.run("INSERT INTO reminders (title, datetime) VALUES (?, ?)", [title, datetime], function(err) {
+		db.run("INSERT INTO reminders (title, datetime, recurrence) VALUES (?, ?, ?)", [
+			title,
+			datetime,
+			recurrence
+		], function(err) {
 			if (err) reject(err);
 			else resolve({
 				id: this.lastID,
 				title,
 				datetime,
-				status: "agendado"
+				status: "agendado",
+				recurrence
 			});
 		});
 	});
 }
 function updateReminderStatus(id, status, newDatetime = null) {
 	return new Promise((resolve, reject) => {
-		if (newDatetime) db.run("UPDATE reminders SET status = ?, datetime = ? WHERE id = ?", [
+		if (status === "concluido") db.get("SELECT * FROM reminders WHERE id = ?", [id], (err, row) => {
+			if (err || !row) {
+				db.run("UPDATE reminders SET status = ? WHERE id = ?", [status, id], (e) => e ? reject(e) : resolve(true));
+				return;
+			}
+			if (row.recurrence && row.recurrence !== "none") {
+				const nextDate = new Date(row.datetime);
+				if (row.recurrence === "daily") nextDate.setDate(nextDate.getDate() + 1);
+				if (row.recurrence === "weekly") nextDate.setDate(nextDate.getDate() + 7);
+				if (row.recurrence === "monthly") nextDate.setMonth(nextDate.getMonth() + 1);
+				if (row.recurrence === "yearly") nextDate.setFullYear(nextDate.getFullYear() + 1);
+				db.run("INSERT INTO reminders (title, datetime, recurrence) VALUES (?, ?, ?)", [
+					row.title,
+					nextDate.toISOString(),
+					row.recurrence
+				], (e) => {
+					db.run("UPDATE reminders SET status = 'concluido', recurrence = 'none' WHERE id = ?", [id], (e2) => e2 ? reject(e2) : resolve(true));
+				});
+			} else db.run("UPDATE reminders SET status = 'concluido' WHERE id = ?", [id], (e) => e ? reject(e) : resolve(true));
+		});
+		else if (newDatetime) db.run("UPDATE reminders SET status = ?, datetime = ? WHERE id = ?", [
 			status,
 			newDatetime,
 			id
@@ -169,11 +236,12 @@ function updateReminderStatus(id, status, newDatetime = null) {
 		});
 	});
 }
-function updateReminderFull(id, title, datetime) {
+function updateReminderFull(id, title, datetime, recurrence = "none") {
 	return new Promise((resolve, reject) => {
-		db.run("UPDATE reminders SET title = ?, datetime = ? WHERE id = ?", [
+		db.run("UPDATE reminders SET title = ?, datetime = ?, recurrence = ? WHERE id = ?", [
 			title,
 			datetime,
+			recurrence,
 			id
 		], (err) => {
 			if (err) reject(err);
@@ -181,11 +249,12 @@ function updateReminderFull(id, title, datetime) {
 		});
 	});
 }
-function reagendarPerdido(id, title, datetime) {
+function reagendarPerdido(id, title, datetime, recurrence = "none") {
 	return new Promise((resolve, reject) => {
-		db.run("UPDATE reminders SET title = ?, datetime = ?, status = 'agendado' WHERE id = ?", [
+		db.run("UPDATE reminders SET title = ?, datetime = ?, recurrence = ?, status = 'agendado' WHERE id = ?", [
 			title,
 			datetime,
+			recurrence,
 			id
 		], (err) => {
 			if (err) reject(err);
@@ -403,8 +472,8 @@ function broadcastDataUpdate() {
 	if (historyWindow && !historyWindow.isDestroyed()) historyWindow.webContents.send("data-updated");
 }
 electron.ipcMain.handle("get-tasks", async () => await getTasks());
-electron.ipcMain.handle("add-task", async (event, title) => {
-	const r = await addTask(title);
+electron.ipcMain.handle("add-task", async (event, title, tag, tagColor) => {
+	const r = await addTask(title, tag, tagColor);
 	broadcastDataUpdate();
 	return r;
 });
@@ -414,9 +483,19 @@ electron.ipcMain.handle("toggle-task", async (event, id, completed) => {
 	return r;
 });
 electron.ipcMain.handle("update-task-title", async (event, id, title) => {
-	const r = await updateTaskTitle(id, title);
+	const res = await updateTaskTitle(id, title);
 	broadcastDataUpdate();
-	return r;
+	return res;
+});
+electron.ipcMain.handle("delete-task", async (event, id) => {
+	const res = await deleteTask(id);
+	broadcastDataUpdate();
+	return res;
+});
+electron.ipcMain.handle("update-task-tag", async (event, oldTag, newTag, newTagColor) => {
+	const res = await updateTaskTag(oldTag, newTag, newTagColor);
+	broadcastDataUpdate();
+	return res;
 });
 electron.ipcMain.handle("reorder-tasks", async (event, ids) => {
 	const r = await reorderTasks(ids);
@@ -424,8 +503,8 @@ electron.ipcMain.handle("reorder-tasks", async (event, ids) => {
 	return r;
 });
 electron.ipcMain.handle("get-reminders", async () => await getReminders());
-electron.ipcMain.handle("add-reminder", async (event, title, datetime) => {
-	const r = await addReminder(title, datetime);
+electron.ipcMain.handle("add-reminder", async (event, title, datetime, recurrence) => {
+	const r = await addReminder(title, datetime, recurrence);
 	broadcastDataUpdate();
 	return r;
 });
@@ -434,13 +513,13 @@ electron.ipcMain.handle("update-reminder", async (event, id, status, newDatetime
 	broadcastDataUpdate();
 	return r;
 });
-electron.ipcMain.handle("update-reminder-full", async (event, id, title, datetime) => {
-	const r = await updateReminderFull(id, title, datetime);
+electron.ipcMain.handle("update-reminder-full", async (event, id, title, datetime, recurrence) => {
+	const r = await updateReminderFull(id, title, datetime, recurrence);
 	broadcastDataUpdate();
 	return r;
 });
-electron.ipcMain.handle("reagendar-perdido", async (event, id, title, datetime) => {
-	const r = await reagendarPerdido(id, title, datetime);
+electron.ipcMain.handle("reagendar-perdido", async (event, id, title, datetime, recurrence) => {
+	const r = await reagendarPerdido(id, title, datetime, recurrence);
 	broadcastDataUpdate();
 	return r;
 });

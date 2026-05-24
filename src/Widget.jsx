@@ -5,8 +5,8 @@
  * - Trilho de Movimento: A área total de arrasto vertical.
  * - Puxador: A pequena barra que o usuário clica e arrasta para mover a posição vertical.
  */
-import React, { useState, useEffect } from 'react';
-import { Settings, Plus, CheckCircle, Bell, ChevronDown, ChevronRight, GripVertical, Clock } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Settings, Plus, CheckCircle, Bell, ChevronDown, ChevronRight, GripVertical, Clock, Tag, X } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 
 function Widget() {
@@ -25,6 +25,32 @@ function Widget() {
   const [edge, setEdge] = useState('right');
   const [yPos, setYPos] = useState(0);
 
+  // Módulos Extras
+  const [pomodoroStatus, setPomodoroStatus] = useState('idle'); // idle, running, paused, break
+  const [pomodoroTimeLeft, setPomodoroTimeLeft] = useState(0);
+  const [quickNote, setQuickNote] = useState('');
+  const [selectedTag, setSelectedTag] = useState('');
+  const [showTagMenu, setShowTagMenu] = useState(false);
+  const [savedTags, setSavedTags] = useState([]);
+  const [newReminderRecurrence, setNewReminderRecurrence] = useState('none');
+  const [editingTag, setEditingTag] = useState(null);
+  const [editingTagValue, setEditingTagValue] = useState('');
+  const tagMenuRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (tagMenuRef.current && !tagMenuRef.current.contains(event.target)) {
+        setShowTagMenu(false);
+      }
+    };
+    if (showTagMenu) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [showTagMenu]);
+
   const [settings, setSettings] = useState({});
 
   const loadData = async () => {
@@ -37,6 +63,29 @@ function Widget() {
       setSettings(s);
       if (s.edge) setEdge(s.edge);
       if (s.yPosition) setYPos(parseInt(s.yPosition));
+      if (s.quickNote && quickNote === '') setQuickNote(s.quickNote);
+      if (s.savedTags) {
+        try {
+          setSavedTags(JSON.parse(s.savedTags));
+        } catch(e) {}
+      }
+      
+      // Extrair tags das tarefas carregadas caso haja novas
+      let hasNewTags = false;
+      const currentSavedTags = s.savedTags ? JSON.parse(s.savedTags) : [];
+      t.forEach(task => {
+        if (task.tag && task.tag.trim() !== '') {
+          const exists = currentSavedTags.some(tag => tag.name.toLowerCase() === task.tag.toLowerCase());
+          if (!exists) {
+            currentSavedTags.push({ name: task.tag, color: task.tagColor || getTagColor(task.tag) });
+            hasNewTags = true;
+          }
+        }
+      });
+      if (hasNewTags) {
+        window.api.updateSetting('savedTags', JSON.stringify(currentSavedTags));
+        setSavedTags(currentSavedTags);
+      }
       
       if (s.theme === 'claro') {
         document.body.classList.add('theme-light');
@@ -166,6 +215,57 @@ function Widget() {
     };
   }, [isExpanded, settings.delay]);
   
+  // Efeito isolado para o tick do Pomodoro
+  useEffect(() => {
+    let pTimer;
+    if (pomodoroStatus === 'running' || pomodoroStatus === 'break') {
+      pTimer = setInterval(() => {
+        setPomodoroTimeLeft(prev => {
+          if (prev <= 1) {
+            clearInterval(pTimer);
+            // Terminou o tempo
+            import('./utils/audio.js').then(module => {
+              const vol = settings.soundVolume ? parseInt(settings.soundVolume) / 100 : 0.8;
+              const type = settings.pomodoroSound || 'sino';
+              module.playNotificationSound(vol, type);
+            });
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => clearInterval(pTimer);
+  }, [pomodoroStatus, settings]);
+
+  const handlePomodoroToggle = () => {
+    if (pomodoroStatus === 'idle') {
+      setPomodoroTimeLeft(parseInt(settings.pomodoroFocus || '25') * 60);
+      setPomodoroStatus('running');
+    } else if (pomodoroStatus === 'running') {
+      setPomodoroStatus('paused');
+    } else if (pomodoroStatus === 'paused') {
+      setPomodoroStatus('running');
+    } else {
+      // Break over, go idle
+      setPomodoroStatus('idle');
+    }
+  };
+
+  const handlePomodoroBreak = () => {
+    setPomodoroTimeLeft(parseInt(settings.pomodoroBreak || '5') * 60);
+    setPomodoroStatus('break');
+  };
+
+  const resetPomodoro = () => setPomodoroStatus('idle');
+
+  const formatPomodoroTime = (seconds) => {
+    if (seconds <= 0 && pomodoroStatus !== 'idle') return '00:00';
+    const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+    const s = (seconds % 60).toString().padStart(2, '0');
+    return `${m}:${s}`;
+  };
+  
   const shownRemindersRef = React.useRef(new Set());
   
   const checkReminders = async () => {
@@ -273,11 +373,29 @@ function Widget() {
     window.api?.updatePosition(currentEdgeRef.current, currentYPosRef.current);
   };
 
+  const getTagColor = (tag) => {
+    let hash = 0;
+    for (let i = 0; i < tag.length; i++) hash = tag.charCodeAt(i) + ((hash << 5) - hash);
+    return `hsl(${Math.abs(hash) % 360}, 75%, 60%)`;
+  };
+
+  const addTagToSaved = (tagName) => {
+    const exists = savedTags.some(t => t.name.toLowerCase() === tagName.toLowerCase());
+    if (!exists && window.api) {
+      const newTag = { name: tagName, color: getTagColor(tagName) };
+      const newSavedTags = [...savedTags, newTag];
+      setSavedTags(newSavedTags);
+      window.api.updateSetting('savedTags', JSON.stringify(newSavedTags));
+    }
+  };
+
   const handleAddTask = async (e) => {
     if (e.key === 'Enter' && newTaskTitle.trim() !== '') {
       if (window.api) {
-        await window.api.addTask(newTaskTitle);
+        await window.api.addTask(newTaskTitle, selectedTag || null, selectedTag ? getTagColor(selectedTag) : null);
+        if (selectedTag) addTagToSaved(selectedTag);
         setNewTaskTitle('');
+        setSelectedTag('');
         loadData();
       }
     }
@@ -302,6 +420,40 @@ function Widget() {
     loadData();
   };
 
+  const handleDeleteTask = async (id) => {
+    if (window.api) {
+      await window.api.deleteTask(id);
+      loadData();
+    }
+  };
+
+  const handleDeleteTag = (tagName) => {
+    const newTags = savedTags.filter(t => t.name !== tagName);
+    setSavedTags(newTags);
+    if (window.api) window.api.updateSetting('savedTags', JSON.stringify(newTags));
+    if (selectedTag === tagName) setSelectedTag('');
+  };
+
+  const handleSaveTagEdit = async () => {
+    if (!editingTagValue.trim()) {
+      setEditingTag(null);
+      return;
+    }
+    const newName = editingTagValue.trim();
+    if (newName !== editingTag) {
+      const newColor = getTagColor(newName);
+      const newTags = savedTags.map(t => t.name === editingTag ? { name: newName, color: newColor } : t);
+      setSavedTags(newTags);
+      if (window.api) {
+        window.api.updateSetting('savedTags', JSON.stringify(newTags));
+        await window.api.updateTaskTag(editingTag, newName, newColor);
+        loadData();
+      }
+      if (selectedTag === editingTag) setSelectedTag(newName);
+    }
+    setEditingTag(null);
+  };
+
   const handleAddReminder = async () => {
     if (!newReminderTitle || !newReminderDate || !newReminderTime) return;
     const dt = new Date(`${newReminderDate}T${newReminderTime}`);
@@ -310,8 +462,9 @@ function Widget() {
       return;
     }
     if (window.api) {
-      await window.api.addReminder(newReminderTitle, dt.toISOString());
+      await window.api.addReminder(newReminderTitle, dt.toISOString(), newReminderRecurrence);
       setNewReminderTitle('');
+      setNewReminderRecurrence('none');
       
       const now = new Date();
       const year = now.getFullYear();
@@ -392,6 +545,10 @@ function Widget() {
   const showReminders = settings.enableReminders !== 'false';
   const opacity = settings.opacity ? parseInt(settings.opacity) / 100 : 0.9;
   const expandedOpacity = settings.expandedOpacity ? parseInt(settings.expandedOpacity) / 100 : 1.0;
+  
+  const todayStr = new Date().toDateString();
+  const todaysTasks = tasks.filter(t => !t.completed || new Date(t.completedAt).toDateString() === todayStr);
+  const todaysCompletedCount = todaysTasks.filter(t => t.completed).length;
 
   return (
     <div className="app-container" style={{ justifyContent: edge === 'left' ? 'flex-start' : 'flex-end' }} onPointerEnter={handlePointerEnter} onPointerLeave={handlePointerLeave}>
@@ -437,10 +594,120 @@ function Widget() {
           </button>
         </div>
 
+        {settings.enableProgressBar === 'true' && (
+          <div style={{ width: '100%', height: '4px', backgroundColor: 'rgba(255,255,255,0.05)' }}>
+            <div style={{ 
+              height: '100%', 
+              backgroundColor: 'var(--success)', 
+              width: `${todaysTasks.length > 0 ? (todaysCompletedCount / todaysTasks.length) * 100 : 0}%`,
+              transition: 'width 0.3s ease'
+            }} />
+          </div>
+        )}
+
+        {settings.enablePomodoro === 'true' && (
+          <div style={{ padding: '15px', borderBottom: '1px solid var(--border)', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <div style={{ fontSize: '2rem', fontWeight: 'bold', fontFamily: 'monospace', color: pomodoroStatus === 'break' ? 'var(--success)' : 'var(--primary)' }}>
+              {pomodoroStatus === 'idle' ? `${String(settings.pomodoroFocus || 25).padStart(2, '0')}:00` : formatPomodoroTime(pomodoroTimeLeft)}
+            </div>
+            <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+              <button className="btn-primary" style={{ padding: '6px 12px', fontSize: '0.8rem' }} onClick={handlePomodoroToggle}>
+                {pomodoroStatus === 'idle' ? 'Iniciar Foco' : pomodoroStatus === 'running' ? 'Pausar' : pomodoroStatus === 'paused' ? 'Continuar' : 'Fim da Pausa'}
+              </button>
+              {(pomodoroStatus === 'running' || pomodoroStatus === 'paused') && (
+                <button className="btn-secondary" style={{ padding: '6px 12px', fontSize: '0.8rem' }} onClick={handlePomodoroBreak}>
+                  Descanso
+                </button>
+              )}
+              {pomodoroStatus !== 'idle' && (
+                <button className="btn-secondary" style={{ padding: '6px 12px', fontSize: '0.8rem', color: 'var(--danger)' }} onClick={resetPomodoro}>
+                  Parar
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         {showTasks && (
         <div className="half-section">
           <div className="fixed-half-header">
             <span style={{color: '#e0c0aa'}}>📋 TAREFAS</span>
+          </div>
+
+          <div style={{ padding: '10px 15px 5px 15px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', position: 'relative' }}>
+              <div style={{ flex: 1, position: 'relative' }}>
+                <input 
+                  type="text" 
+                  className="add-task-input" 
+                  placeholder="+ Adicionar tarefa rápida..."
+                  value={newTaskTitle}
+                  onChange={(e) => setNewTaskTitle(e.target.value)}
+                  onKeyDown={handleAddTask}
+                  style={{ paddingRight: settings.enableTags === 'true' ? '30px' : '10px' }}
+                />
+                {settings.enableTags === 'true' && (
+                  <div 
+                    ref={tagMenuRef}
+                    style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', cursor: 'pointer', color: selectedTag ? getTagColor(selectedTag) : 'var(--text-muted)' }}
+                    onClick={() => setShowTagMenu(!showTagMenu)}
+                  >
+                    <Tag size={16} />
+                    {showTagMenu && (
+                      <div style={{ position: 'absolute', right: 0, top: '25px', backgroundColor: 'var(--bg-main)', border: '1px solid var(--border)', borderRadius: '8px', padding: '10px', zIndex: 100, width: '200px', boxShadow: '0 4px 12px rgba(0,0,0,0.5)', cursor: 'default' }} onClick={(e) => e.stopPropagation()}>
+                        <div style={{ fontSize: '0.75rem', fontWeight: 'bold', marginBottom: '8px', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          ESCOLHA UMA TAG
+                          <span style={{ cursor: 'pointer', padding: '2px 5px' }} onClick={() => setShowTagMenu(false)}>✕</span>
+                        </div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginBottom: '10px' }}>
+                          <span 
+                            style={{ fontSize: '0.7rem', padding: '3px 8px', borderRadius: '12px', cursor: 'pointer', border: '1px solid var(--border)', backgroundColor: !selectedTag ? 'rgba(255,255,255,0.1)' : 'transparent' }}
+                            onClick={() => { setSelectedTag(''); setShowTagMenu(false); }}
+                          >Nenhuma</span>
+                          {savedTags.map(tag => (
+                            editingTag === tag.name ? (
+                              <input
+                                key={`edit-${tag.name}`}
+                                autoFocus
+                                value={editingTagValue}
+                                onChange={e => setEditingTagValue(e.target.value)}
+                                onBlur={handleSaveTagEdit}
+                                onKeyDown={e => e.key === 'Enter' && handleSaveTagEdit()}
+                                style={{ fontSize: '0.7rem', padding: '2px 4px', width: '70px', borderRadius: '12px', border: '1px solid var(--border)', backgroundColor: 'var(--bg-hover)', color: '#fff' }}
+                              />
+                            ) : (
+                              <span 
+                                key={tag.name}
+                                style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.7rem', padding: '2px 6px', borderRadius: '12px', cursor: 'pointer', backgroundColor: tag.color, color: '#fff', opacity: selectedTag === tag.name ? 1 : 0.6 }}
+                              >
+                                <span 
+                                  onClick={() => { setSelectedTag(tag.name); setShowTagMenu(false); }}
+                                  onDoubleClick={() => { setEditingTag(tag.name); setEditingTagValue(tag.name); }}
+                                >
+                                  {tag.name}
+                                </span>
+                                <span style={{ fontSize: '0.6rem', padding: '0 2px', opacity: 0.7 }} onClick={(e) => { e.stopPropagation(); handleDeleteTag(tag.name); }}>✕</span>
+                              </span>
+                            )
+                          ))}
+                        </div>
+                        <input 
+                          type="text" 
+                          className="form-control" 
+                          style={{ fontSize: '0.75rem', padding: '4px' }}
+                          placeholder="Nova tag..."
+                          value={selectedTag}
+                          onChange={(e) => setSelectedTag(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') setShowTagMenu(false);
+                          }}
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
           
           <div className="scrollable-content">
@@ -477,15 +744,16 @@ function Widget() {
                                 onKeyDown={(e) => {
                                   if (e.key === 'Enter') handleUpdateTaskTitle(task.id);
                                   if (e.key === 'Escape') {
-                                    setEditingTaskId(null);
-                                    setEditingTaskTitle('');
-                                  }
-                                }}
-                              />
-                            ) : (
+                                  setEditingTaskId(null);
+                                  setEditingTaskTitle('');
+                                }
+                              }}
+                            />
+                          ) : (
+                            <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
                               <span 
                                 className="task-title" 
-                                style={{ flex: 1, cursor: 'text' }}
+                                style={{ cursor: 'text', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
                                 onClick={() => {
                                   setEditingTaskId(task.id);
                                   setEditingTaskTitle(task.title);
@@ -493,8 +761,17 @@ function Widget() {
                               >
                                 {task.title}
                               </span>
-                            )}
-                          </div>
+                              {settings.enableTags === 'true' && task.tag && (
+                                <span style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', backgroundColor: task.tagColor, color: '#fff', fontWeight: 600, flexShrink: 0 }}>
+                                  {task.tag}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                          <span style={{ cursor: 'pointer', color: 'var(--text-muted)', marginLeft: '4px' }} onClick={() => handleDeleteTask(task.id)}>
+                            <X size={14} />
+                          </span>
+                        </div>
                         )}
                       </Draggable>
                     ))}
@@ -503,17 +780,6 @@ function Widget() {
                 )}
               </Droppable>
             </DragDropContext>
-
-            <div style={{ marginTop: '10px', marginBottom: '20px' }}>
-              <input 
-                type="text" 
-                className="add-task-input" 
-                placeholder="+ Adicionar tarefa rápida..."
-                value={newTaskTitle}
-                onChange={(e) => setNewTaskTitle(e.target.value)}
-                onKeyDown={handleAddTask}
-              />
-            </div>
 
             <div 
               style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '1px', marginBottom: '15px', display: 'flex', justifyContent: 'space-between', cursor: 'pointer' }}
@@ -564,6 +830,9 @@ function Widget() {
                     )}
                     <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
                       {formatCompletedDate(task.completedAt)}
+                    </span>
+                    <span style={{ cursor: 'pointer', color: 'var(--text-muted)', marginLeft: '4px' }} onClick={() => handleDeleteTask(task.id)}>
+                      <X size={14} />
                     </span>
                   </div>
                 ))}
@@ -618,6 +887,21 @@ function Widget() {
               </div>
             </div>
             
+            <div className="form-group">
+              <label className="form-label">RECORRÊNCIA</label>
+              <select 
+                className="form-control"
+                value={newReminderRecurrence}
+                onChange={e => setNewReminderRecurrence(e.target.value)}
+              >
+                <option value="none">Não repetir (Único)</option>
+                <option value="daily">Diariamente</option>
+                <option value="weekly">Semanalmente</option>
+                <option value="monthly">Mensalmente</option>
+                <option value="yearly">Anualmente</option>
+              </select>
+            </div>
+            
             {reminders.some(r => (r.status === 'agendado' || r.status === 'pausado') && r.datetime.startsWith(newReminderDate) && r.datetime.includes('T' + newReminderTime)) && (
               <div style={{ color: 'var(--danger)', fontSize: '0.7rem', marginBottom: '10px', marginTop: '-5px' }}>
                 ⚠️ Já existe um lembrete nesse horário.
@@ -644,10 +928,30 @@ function Widget() {
         </div>
         )}
 
+        {settings.enableNotes === 'true' && (
+          <div className="half-section" style={{ flex: 'none', height: '180px' }}>
+            <div className="fixed-half-header">
+              <span style={{color: '#8ab4f8'}}>📝 NOTAS RÁPIDAS</span>
+            </div>
+            <div className="scrollable-content" style={{ paddingBottom: '10px' }}>
+              <textarea 
+                className="form-control"
+                style={{ height: '100%', resize: 'none', backgroundColor: 'var(--bg-main)' }}
+                placeholder="Escreva algo aqui... salvo automaticamente."
+                value={quickNote}
+                onChange={(e) => setQuickNote(e.target.value)}
+                onBlur={() => {
+                  if (window.api) window.api.updateSetting('quickNote', quickNote);
+                }}
+              />
+            </div>
+          </div>
+        )}
+
         <div className="footer" style={{ padding: '10px 20px', fontSize: '0.65rem', color: 'var(--text-muted)', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', whiteSpace: 'nowrap', overflow: 'hidden' }}>
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', display: 'flex', gap: '15px' }}>
-            <span>📝 {tasks.filter(t => t.completed).length}/{tasks.length} concluídas</span>
-            <span>🔔 {reminders.filter(r => r.status === 'agendado' || r.status === 'pausado').length} pendentes</span>
+            <span>📝 {todaysCompletedCount}/{todaysTasks.length} concluídas hoje</span>
+            <span>🔔 {reminders.filter(r => r.status === 'agendado' || r.status === 'pausado').length} agendados</span>
             {reminders.some(r => r.status === 'perdido') && (
               <span 
                 className="pulse-error" 
