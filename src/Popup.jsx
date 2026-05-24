@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Bell, CheckCircle, Clock } from 'lucide-react';
 
+import { playNotificationSound } from './utils/audio.js';
+
 function Popup() {
   const [reminder, setReminder] = useState(null);
   const [showOptions, setShowOptions] = useState(false);
@@ -13,6 +15,16 @@ function Popup() {
         const dataStr = hash.split('?data=')[1];
         const data = JSON.parse(decodeURIComponent(dataStr));
         setReminder(data);
+      }
+      
+      // Play sound
+      if (window.api) {
+        window.api.getSettings().then(settings => {
+          if (settings.soundEnabled !== 'false') {
+            const vol = settings.soundVolume ? parseInt(settings.soundVolume) / 100 : 0.8;
+            playNotificationSound(vol);
+          }
+        });
       }
     } catch (e) {
       console.error("Failed to parse reminder data", e);

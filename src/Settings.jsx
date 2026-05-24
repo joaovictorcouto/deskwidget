@@ -168,6 +168,33 @@ function Settings() {
               onChange={(e) => updateLocalSetting('delay', e.target.value)}
             />
           </div>
+
+          <div className="setting-item">
+            <span>Som de Notificação</span>
+            <div 
+              className={`toggle-switch ${localSettings.soundEnabled !== 'false' ? 'on' : ''}`}
+              onClick={() => updateLocalSetting('soundEnabled', localSettings.soundEnabled === 'false' ? 'true' : 'false')}
+            >
+              <div className="toggle-thumb"></div>
+            </div>
+          </div>
+          
+          {localSettings.soundEnabled !== 'false' && (
+            <div className="setting-item" style={{ flexDirection: 'column', alignItems: 'flex-start', borderTop: 'none', paddingTop: 0 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', marginBottom: '10px' }}>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Volume do Som</span>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{localSettings.soundVolume || 80}%</span>
+              </div>
+              <input 
+                type="range" 
+                min="0" max="100" 
+                value={localSettings.soundVolume || 80}
+                onChange={(e) => updateLocalSetting('soundVolume', e.target.value)}
+                className="slider"
+                style={{ width: '100%' }}
+              />
+            </div>
+          )}
         </div>
 
         <div className="settings-section" style={{ borderBottom: 'none', marginBottom: 0 }}>

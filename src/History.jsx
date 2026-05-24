@@ -19,12 +19,19 @@ function History() {
   };
 
   useEffect(() => {
+    let removeDataListener;
+    if (window.api?.onDataUpdated) {
+      removeDataListener = window.api.onDataUpdated(() => loadData());
+    }
     loadData();
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') window.api?.closeWindow();
     };
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      if (removeDataListener) removeDataListener();
+    };
   }, []);
 
   const clearHistory = async () => {
@@ -70,7 +77,12 @@ function History() {
   const saveClone = async () => {
     if (!window.api) return;
     const dt = new Date(`${editDate}T${editTime}`);
-    await window.api.addReminder(editTitle, dt.toISOString());
+    const original = reminders.find(r => r.id === cloningId);
+    if (original && original.status === 'perdido') {
+      await window.api.reagendarPerdido(cloningId, editTitle, dt.toISOString());
+    } else {
+      await window.api.addReminder(editTitle, dt.toISOString());
+    }
     setCloningId(null);
     loadData();
   };

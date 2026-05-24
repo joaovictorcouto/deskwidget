@@ -181,6 +181,18 @@ function updateReminderFull(id, title, datetime) {
 		});
 	});
 }
+function reagendarPerdido(id, title, datetime) {
+	return new Promise((resolve, reject) => {
+		db.run("UPDATE reminders SET title = ?, datetime = ?, status = 'agendado' WHERE id = ?", [
+			title,
+			datetime,
+			id
+		], (err) => {
+			if (err) reject(err);
+			else resolve(true);
+		});
+	});
+}
 function deleteReminder(id) {
 	return new Promise((resolve, reject) => {
 		db.run("DELETE FROM reminders WHERE id = ?", [id], (err) => {
@@ -386,17 +398,62 @@ electron.ipcMain.on("collapse-window", () => {
 		});
 	}
 });
+function broadcastDataUpdate() {
+	if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("data-updated");
+	if (historyWindow && !historyWindow.isDestroyed()) historyWindow.webContents.send("data-updated");
+}
 electron.ipcMain.handle("get-tasks", async () => await getTasks());
-electron.ipcMain.handle("add-task", async (event, title) => await addTask(title));
-electron.ipcMain.handle("toggle-task", async (event, id, completed) => await toggleTask(id, completed));
-electron.ipcMain.handle("update-task-title", async (event, id, title) => await updateTaskTitle(id, title));
-electron.ipcMain.handle("reorder-tasks", async (event, ids) => await reorderTasks(ids));
+electron.ipcMain.handle("add-task", async (event, title) => {
+	const r = await addTask(title);
+	broadcastDataUpdate();
+	return r;
+});
+electron.ipcMain.handle("toggle-task", async (event, id, completed) => {
+	const r = await toggleTask(id, completed);
+	broadcastDataUpdate();
+	return r;
+});
+electron.ipcMain.handle("update-task-title", async (event, id, title) => {
+	const r = await updateTaskTitle(id, title);
+	broadcastDataUpdate();
+	return r;
+});
+electron.ipcMain.handle("reorder-tasks", async (event, ids) => {
+	const r = await reorderTasks(ids);
+	broadcastDataUpdate();
+	return r;
+});
 electron.ipcMain.handle("get-reminders", async () => await getReminders());
-electron.ipcMain.handle("add-reminder", async (event, title, datetime) => await addReminder(title, datetime));
-electron.ipcMain.handle("update-reminder", async (event, id, status, newDatetime) => await updateReminderStatus(id, status, newDatetime));
-electron.ipcMain.handle("update-reminder-full", async (event, id, title, datetime) => await updateReminderFull(id, title, datetime));
-electron.ipcMain.handle("delete-reminder", async (event, id) => await deleteReminder(id));
-electron.ipcMain.handle("clear-history", async () => await clearHistory());
+electron.ipcMain.handle("add-reminder", async (event, title, datetime) => {
+	const r = await addReminder(title, datetime);
+	broadcastDataUpdate();
+	return r;
+});
+electron.ipcMain.handle("update-reminder", async (event, id, status, newDatetime) => {
+	const r = await updateReminderStatus(id, status, newDatetime);
+	broadcastDataUpdate();
+	return r;
+});
+electron.ipcMain.handle("update-reminder-full", async (event, id, title, datetime) => {
+	const r = await updateReminderFull(id, title, datetime);
+	broadcastDataUpdate();
+	return r;
+});
+electron.ipcMain.handle("reagendar-perdido", async (event, id, title, datetime) => {
+	const r = await reagendarPerdido(id, title, datetime);
+	broadcastDataUpdate();
+	return r;
+});
+electron.ipcMain.handle("delete-reminder", async (event, id) => {
+	const r = await deleteReminder(id);
+	broadcastDataUpdate();
+	return r;
+});
+electron.ipcMain.handle("clear-history", async () => {
+	const r = await clearHistory();
+	broadcastDataUpdate();
+	return r;
+});
 electron.ipcMain.handle("get-settings", async () => await getSettings());
 electron.ipcMain.handle("update-setting", async (event, key, value) => {
 	await updateSetting(key, value);

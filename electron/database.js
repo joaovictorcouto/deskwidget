@@ -164,6 +164,15 @@ export function updateReminderFull(id, title, datetime) {
   });
 }
 
+export function reagendarPerdido(id, title, datetime) {
+  return new Promise((resolve, reject) => {
+    db.run("UPDATE reminders SET title = ?, datetime = ?, status = 'agendado' WHERE id = ?", [title, datetime, id], (err) => {
+      if (err) reject(err);
+      else resolve(true);
+    });
+  });
+}
+
 export function deleteReminder(id) {
   return new Promise((resolve, reject) => {
     db.run("DELETE FROM reminders WHERE id = ?", [id], (err) => {

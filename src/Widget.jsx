@@ -67,6 +67,13 @@ function Widget() {
       });
     }
 
+    let removeDataListener;
+    if (window.api?.onDataUpdated) {
+      removeDataListener = window.api.onDataUpdated(() => {
+        loadData();
+      });
+    }
+
     let removeOpenListener;
     if (window.api?.onSettingsOpened) {
       removeOpenListener = window.api.onSettingsOpened(() => {
@@ -149,6 +156,7 @@ function Widget() {
     return () => {
       clearInterval(interval);
       if (removeListener) removeListener();
+      if (removeDataListener) removeDataListener();
       if (removeOpenListener) removeOpenListener();
       if (removeCloseListener) removeCloseListener();
       if (removeHistoryOpenListener) removeHistoryOpenListener();

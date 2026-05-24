@@ -25,8 +25,10 @@ contextBridge.exposeInMainWorld('api', {
   addReminder: (title, datetime) => ipcRenderer.invoke('add-reminder', title, datetime),
   updateReminder: (id, status, newDatetime) => ipcRenderer.invoke('update-reminder', id, status, newDatetime),
   updateReminderFull: (id, title, datetime) => ipcRenderer.invoke('update-reminder-full', id, title, datetime),
+  reagendarPerdido: (id, title, datetime) => ipcRenderer.invoke('reagendar-perdido', id, title, datetime),
   deleteReminder: (id) => ipcRenderer.invoke('delete-reminder', id),
   clearHistory: () => ipcRenderer.invoke('clear-history'),
+  onDataUpdated: (callback) => ipcRenderer.on('data-updated', () => callback()),
 
   // Settings
   getSettings: () => ipcRenderer.invoke('get-settings'),

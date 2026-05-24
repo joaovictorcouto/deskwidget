@@ -192,20 +192,26 @@ ipcMain.on('collapse-window', () => {
   }
 });
 
+function broadcastDataUpdate() {
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('data-updated');
+  if (historyWindow && !historyWindow.isDestroyed()) historyWindow.webContents.send('data-updated');
+}
+
 // IPC Handlers for Database
 ipcMain.handle('get-tasks', async () => await db.getTasks());
-ipcMain.handle('add-task', async (event, title) => await db.addTask(title));
-ipcMain.handle('toggle-task', async (event, id, completed) => await db.toggleTask(id, completed));
+ipcMain.handle('add-task', async (event, title) => { const r = await db.addTask(title); broadcastDataUpdate(); return r; });
+ipcMain.handle('toggle-task', async (event, id, completed) => { const r = await db.toggleTask(id, completed); broadcastDataUpdate(); return r; });
 
-ipcMain.handle('update-task-title', async (event, id, title) => await db.updateTaskTitle(id, title));
-ipcMain.handle('reorder-tasks', async (event, ids) => await db.reorderTasks(ids));
+ipcMain.handle('update-task-title', async (event, id, title) => { const r = await db.updateTaskTitle(id, title); broadcastDataUpdate(); return r; });
+ipcMain.handle('reorder-tasks', async (event, ids) => { const r = await db.reorderTasks(ids); broadcastDataUpdate(); return r; });
 
 ipcMain.handle('get-reminders', async () => await db.getReminders());
-ipcMain.handle('add-reminder', async (event, title, datetime) => await db.addReminder(title, datetime));
-ipcMain.handle('update-reminder', async (event, id, status, newDatetime) => await db.updateReminderStatus(id, status, newDatetime));
-ipcMain.handle('update-reminder-full', async (event, id, title, datetime) => await db.updateReminderFull(id, title, datetime));
-ipcMain.handle('delete-reminder', async (event, id) => await db.deleteReminder(id));
-ipcMain.handle('clear-history', async () => await db.clearHistory());
+ipcMain.handle('add-reminder', async (event, title, datetime) => { const r = await db.addReminder(title, datetime); broadcastDataUpdate(); return r; });
+ipcMain.handle('update-reminder', async (event, id, status, newDatetime) => { const r = await db.updateReminderStatus(id, status, newDatetime); broadcastDataUpdate(); return r; });
+ipcMain.handle('update-reminder-full', async (event, id, title, datetime) => { const r = await db.updateReminderFull(id, title, datetime); broadcastDataUpdate(); return r; });
+ipcMain.handle('reagendar-perdido', async (event, id, title, datetime) => { const r = await db.reagendarPerdido(id, title, datetime); broadcastDataUpdate(); return r; });
+ipcMain.handle('delete-reminder', async (event, id) => { const r = await db.deleteReminder(id); broadcastDataUpdate(); return r; });
+ipcMain.handle('clear-history', async () => { const r = await db.clearHistory(); broadcastDataUpdate(); return r; });
 
 ipcMain.handle('get-settings', async () => await db.getSettings());
 ipcMain.handle('update-setting', async (event, key, value) => {
