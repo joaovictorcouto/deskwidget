@@ -294,7 +294,7 @@ ipcMain.on('show-popup', (event, reminder) => {
   const primaryDisplay = screen.getPrimaryDisplay();
   const { width, height } = primaryDisplay.workAreaSize;
   const pWidth = 320;
-  const pHeight = 250;
+  const pHeight = 170;
 
   popupWindow = new BrowserWindow({
     width: pWidth,

@@ -17,6 +17,8 @@ electron.contextBridge.exposeInMainWorld("api", {
 	getReminders: () => electron.ipcRenderer.invoke("get-reminders"),
 	addReminder: (title, datetime) => electron.ipcRenderer.invoke("add-reminder", title, datetime),
 	updateReminder: (id, status, newDatetime) => electron.ipcRenderer.invoke("update-reminder", id, status, newDatetime),
+	updateReminderFull: (id, title, datetime) => electron.ipcRenderer.invoke("update-reminder-full", id, title, datetime),
+	deleteReminder: (id) => electron.ipcRenderer.invoke("delete-reminder", id),
 	clearHistory: () => electron.ipcRenderer.invoke("clear-history"),
 	getSettings: () => electron.ipcRenderer.invoke("get-settings"),
 	updateSetting: (key, value) => electron.ipcRenderer.invoke("update-setting", key, value),

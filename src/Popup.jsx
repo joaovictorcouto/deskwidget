@@ -75,11 +75,17 @@ function Popup() {
           </button>
 
           {showOptions && (
-            <div style={{ position: 'absolute', bottom: '100%', right: '0', marginBottom: '10px', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '8px', padding: '10px', width: '120px', boxShadow: '0 4px 12px rgba(0,0,0,0.5)' }}>
-              <div className="time-picker-item" onClick={() => handleSnooze(5)}>5 min</div>
-              <div className="time-picker-item" onClick={() => handleSnooze(15)}>15 min</div>
-              <div className="time-picker-item" onClick={() => handleSnooze(30)}>30 min</div>
-              <div className="time-picker-item" onClick={() => handleSnooze(60)}>1 hora</div>
+            <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'var(--bg-main)', borderRadius: '12px', display: 'flex', flexDirection: 'column', zIndex: 10 }}>
+               <div style={{ padding: '15px 20px', borderBottom: '1px solid var(--border)', fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                 Adiar para...
+                 <button className="close-btn" onClick={() => setShowOptions(false)} style={{ margin: '-5px -5px -5px 0' }}>&times;</button>
+               </div>
+               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', padding: '15px 20px' }}>
+                  <button className="btn-secondary" onClick={() => handleSnooze(5)}>5 min</button>
+                  <button className="btn-secondary" onClick={() => handleSnooze(15)}>15 min</button>
+                  <button className="btn-secondary" onClick={() => handleSnooze(30)}>30 min</button>
+                  <button className="btn-secondary" onClick={() => handleSnooze(60)}>1 hora</button>
+               </div>
             </div>
           )}
         </div>

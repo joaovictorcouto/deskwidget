@@ -22,6 +22,8 @@ contextBridge.exposeInMainWorld('api', {
   getReminders: () => ipcRenderer.invoke('get-reminders'),
   addReminder: (title, datetime) => ipcRenderer.invoke('add-reminder', title, datetime),
   updateReminder: (id, status, newDatetime) => ipcRenderer.invoke('update-reminder', id, status, newDatetime),
+  updateReminderFull: (id, title, datetime) => ipcRenderer.invoke('update-reminder-full', id, title, datetime),
+  deleteReminder: (id) => ipcRenderer.invoke('delete-reminder', id),
   clearHistory: () => ipcRenderer.invoke('clear-history'),
 
   // Settings
