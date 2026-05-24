@@ -307,6 +307,16 @@ function Widget() {
     }
   };
 
+  const handleTestPopup = () => {
+    if (window.api) {
+      window.api.showPopup({
+        id: 'test',
+        title: 'Lembrete de Teste',
+        datetime: new Date().toISOString()
+      });
+    }
+  };
+
 
   const openSettings = () => {
     isSettingsOpenRef.current = true;
@@ -550,7 +560,10 @@ function Widget() {
         <div className="half-section">
           <div className="fixed-half-header">
             <span style={{color: '#ffd166'}}>🔔 LEMBRETES</span>
-            <a className="section-title-action" onClick={openHistory}>Ver Todos</a>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <a className="section-title-action" onClick={handleTestPopup}>Testar</a>
+              <a className="section-title-action" onClick={openHistory}>Ver Todos</a>
+            </div>
           </div>
 
           <div className="scrollable-content">

@@ -59,9 +59,11 @@ function History() {
   };
 
   const deleteRem = async (id) => {
-    if (!window.api) return;
-    await window.api.deleteReminder(id);
-    loadData();
+    if (window.confirm("Deseja realmente excluir este lembrete?")) {
+      if (!window.api) return;
+      await window.api.deleteReminder(id);
+      loadData();
+    }
   };
 
   const agendados = reminders.filter(r => r.status === 'agendado' || r.status === 'pausado');
