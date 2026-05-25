@@ -43,7 +43,7 @@ function PopupShell({ label, labelIcon, rightAction, progressBar, draggable, chi
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
           {labelIcon || (
-            <img src="./logo-icon.png" alt="" style={{ height: '15px', objectFit: 'contain' }}
+            <img src={logoIcon} alt="" style={{ height: '15px', objectFit: 'contain' }}
               onError={(e) => e.target.style.display = 'none'} />
           )}
           {label}
