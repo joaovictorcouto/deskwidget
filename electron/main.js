@@ -332,10 +332,10 @@ function openSettingsWindow() {
   
   settingsWindow = new BrowserWindow({
     icon: iconPath,
-    width: savedSettings.width || 400,
-    height: savedSettings.height || 630,
-    minWidth: 350,
-    minHeight: 500,
+    width: savedSettings.width || 560,
+    height: savedSettings.height || 680,
+    minWidth: 560,
+    minHeight: 680,
     frame: false,
     transparent: true,
     webPreferences: {
@@ -376,10 +376,10 @@ function openHistoryWindow() {
 
   historyWindow = new BrowserWindow({
     icon: iconPath,
-    width: savedHistory.width || 450,
-    height: savedHistory.height || 500,
-    minWidth: 400,
-    minHeight: 400,
+    width: savedHistory.width || 500,
+    height: savedHistory.height || 600,
+    minWidth: 500,
+    minHeight: 600,
     frame: false,
     transparent: true,
     webPreferences: {
