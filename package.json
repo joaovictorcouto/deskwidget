@@ -24,7 +24,8 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "runAfterFinish": true
-    }
+    },
+    "npmRebuild": false
   },
   "dependencies": {
     "@hello-pangea/dnd": "^18.0.1",

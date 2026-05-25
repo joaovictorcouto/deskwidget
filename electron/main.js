@@ -28,6 +28,7 @@ function saveWindowConfig(name, bounds) {
 
 
 let mainWindow;
+const iconPath = process.env.VITE_DEV_SERVER_URL ? path.join(__dirname, '../public/logo-icon.png') : path.join(__dirname, '../dist/logo-icon.png');
 let tray = null;
 
 const EXPANDED_WIDTH = 350;
@@ -51,6 +52,7 @@ async function createWindow() {
   let startY = currentYPos === 0 ? Math.floor(y + (height - COLLAPSED_HEIGHT) / 2) : currentYPos;
 
   mainWindow = new BrowserWindow({
+    icon: iconPath,
     width: COLLAPSED_WIDTH,
     height: COLLAPSED_HEIGHT,
     x: currentEdge === 'left' ? x : x + width - COLLAPSED_WIDTH,
@@ -90,13 +92,13 @@ if (!gotTheLock) {
     }
   });
 
+  app.commandLine.appendSwitch('disable-site-isolation-trials');
+
   app.whenReady().then(() => {
     createWindow();
 
   // Create Tray
-  const iconPath = process.env.VITE_DEV_SERVER_URL
-    ? path.join(__dirname, '../public/logo-icon.png')
-    : path.join(__dirname, '../dist/logo-icon.png');
+  
     
   tray = new Tray(nativeImage.createFromPath(iconPath));
   const contextMenu = Menu.buildFromTemplate([
@@ -329,6 +331,7 @@ function openSettingsWindow() {
   const savedSettings = winConfig.settingsWindow || {};
   
   settingsWindow = new BrowserWindow({
+    icon: iconPath,
     width: savedSettings.width || 400,
     height: savedSettings.height || 630,
     minWidth: 350,
@@ -372,6 +375,7 @@ function openHistoryWindow() {
   const savedHistory = winConfig.historyWindow || {};
 
   historyWindow = new BrowserWindow({
+    icon: iconPath,
     width: savedHistory.width || 450,
     height: savedHistory.height || 500,
     minWidth: 400,
@@ -444,6 +448,7 @@ ipcMain.on('show-popup', async (event, config) => {
   const pX = x + width - pWidth - marginRight;
 
   let newPopupWindow = new BrowserWindow({
+    icon: iconPath,
     width: pWidth,
     height: pHeight,
     x: pX,
@@ -513,6 +518,7 @@ ipcMain.on('start-popup-positioner', async () => {
   const pY = Math.min(sy + sh - pHeight - marginBottom, sy + sh - pHeight);
 
   let positionerWin = new BrowserWindow({
+    icon: iconPath,
     width: pWidth,
     height: pHeight,
     x: Math.max(sx, pX),

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Settings as SettingsIcon, Palette, Cpu, Volume2, RotateCcw } from 'lucide-react';
+import { X, Settings as SettingsIcon, Palette, Cpu, Volume2, RotateCcw, Move } from 'lucide-react';
 import { playNotificationSound } from './utils/audio.js';
 
 function Settings() {
@@ -97,6 +97,11 @@ function Settings() {
             style={{ flex: 1, padding: '10px 0', border: 'none', background: 'transparent', color: activeTab === 'audio' ? 'var(--primary)' : 'var(--text-muted)', borderBottom: activeTab === 'audio' ? '2px solid var(--primary)' : '2px solid transparent', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '5px' }}
             onClick={() => setActiveTab('audio')}
           ><Volume2 size={14} /> Áudio</button>
+
+          <button 
+            style={{ flex: 1, padding: '10px 0', border: 'none', background: 'transparent', color: activeTab === 'posicao' ? 'var(--primary)' : 'var(--text-muted)', borderBottom: activeTab === 'posicao' ? '2px solid var(--primary)' : '2px solid transparent', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '5px' }}
+            onClick={() => setActiveTab('posicao')}
+          ><Move size={14} /> Posicionamento</button>
         </div>
 
         {/* TAB CONTENT */}
@@ -220,19 +225,6 @@ function Settings() {
           {/* ABA APARÊNCIA */}
           {activeTab === 'aparencia' && (
             <div>
-              <div className="setting-item">
-                <span>Posição</span>
-                <div className="segmented-control">
-                  <button 
-                    className={`segmented-btn ${localSettings.edge === 'left' ? 'active' : ''}`}
-                    onClick={() => updateLocalSetting('edge', 'left')}
-                  >Esquerda</button>
-                  <button 
-                    className={`segmented-btn ${localSettings.edge !== 'left' ? 'active' : ''}`}
-                    onClick={() => updateLocalSetting('edge', 'right')}
-                  >Direita</button>
-                </div>
-              </div>
               
               <div className="setting-item">
                 <span>Tema</span>
@@ -276,9 +268,34 @@ function Settings() {
                 />
               </div>
 
+              <div style={{ display: 'flex', justifyContent: 'center', marginTop: '20px' }}>
+                <button className="btn-secondary" onClick={() => handleResetTab('aparencia')} style={{ color: 'var(--danger)', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <RotateCcw size={14} /> Restaurar Padrões de Aparência
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ABA POSICIONAMENTO */}
+          {activeTab === 'posicao' && (
+            <div>
+              <div className="setting-item">
+                <span>Posição Lateral do App</span>
+                <div className="segmented-control">
+                  <button 
+                    className={`segmented-btn ${localSettings.edge === 'left' ? 'active' : ''}`}
+                    onClick={() => updateLocalSetting('edge', 'left')}
+                  >Esquerda</button>
+                  <button 
+                    className={`segmented-btn ${localSettings.edge !== 'left' ? 'active' : ''}`}
+                    onClick={() => updateLocalSetting('edge', 'right')}
+                  >Direita</button>
+                </div>
+              </div>
+
               <div className="setting-item" style={{ flexDirection: 'column', alignItems: 'flex-start', borderBottom: 'none' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', marginBottom: '10px' }}>
-                  <span>Posição dos Lembretes</span>
+                  <span>Posição dos Popups</span>
                   <button 
                     className="btn-primary" 
                     onClick={() => window.api?.startPopupPositioner()}
