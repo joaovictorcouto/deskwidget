@@ -59,11 +59,38 @@ export function initDb() {
         db.run("INSERT INTO settings (key, value) VALUES ('startOnWindows', 'false')");
         db.run("INSERT INTO settings (key, value) VALUES ('enablePomodoro', 'false')");
         db.run("INSERT INTO settings (key, value) VALUES ('enableNotes', 'false')");
-        db.run("INSERT INTO settings (key, value) VALUES ('enableProgressBar', 'false')");
-        db.run("INSERT INTO settings (key, value) VALUES ('enableTags', 'false')");
+        db.run("INSERT INTO settings (key, value) VALUES ('enableTasks', 'true')");
+        db.run("INSERT INTO settings (key, value) VALUES ('enableReminders', 'true')");
+        db.run("INSERT INTO settings (key, value) VALUES ('enableProgressBar', 'true')");
+        db.run("INSERT INTO settings (key, value) VALUES ('enableTags', 'true')");
         db.run("INSERT INTO settings (key, value) VALUES ('pomodoroFocus', '25')");
         db.run("INSERT INTO settings (key, value) VALUES ('pomodoroBreak', '5')");
         db.run("INSERT INTO settings (key, value) VALUES ('pomodoroSound', 'sino')");
+        db.run("INSERT INTO settings (key, value) VALUES ('popupMarginRight', '12')");
+        db.run("INSERT INTO settings (key, value) VALUES ('popupMarginBottom', '85')");
+        db.run("INSERT INTO settings (key, value) VALUES ('popupGap', '10')");
+        db.run("INSERT INTO settings (key, value) VALUES ('edge', 'right')");
+        db.run("INSERT INTO settings (key, value) VALUES ('yPosition', '115')");
+        db.run("INSERT INTO settings (key, value) VALUES ('enableProgressBar', 'true')");
+        db.run("INSERT INTO settings (key, value) VALUES ('enableTags', 'true')");
+        db.run("INSERT INTO settings (key, value) VALUES ('pomodoroFocus', '25')");
+        db.run("INSERT INTO settings (key, value) VALUES ('pomodoroBreak', '5')");
+        db.run("INSERT INTO settings (key, value) VALUES ('pomodoroSound', 'sino')");
+        db.run("INSERT INTO settings (key, value) VALUES ('popupMarginRight', '12')");
+        db.run("INSERT INTO settings (key, value) VALUES ('popupMarginBottom', '85')");
+        db.run("INSERT INTO settings (key, value) VALUES ('popupGap', '10')");
+        db.run("INSERT INTO settings (key, value) VALUES ('edge', 'right')");
+        db.run("INSERT INTO settings (key, value) VALUES ('yPosition', '115')");
+        db.run("INSERT INTO settings (key, value) VALUES ('enableProgressBar', 'true')");
+        db.run("INSERT INTO settings (key, value) VALUES ('enableTags', 'true')");
+        db.run("INSERT INTO settings (key, value) VALUES ('pomodoroFocus', '25')");
+        db.run("INSERT INTO settings (key, value) VALUES ('pomodoroBreak', '5')");
+        db.run("INSERT INTO settings (key, value) VALUES ('pomodoroSound', 'sino')");
+        db.run("INSERT INTO settings (key, value) VALUES ('popupMarginRight', '12')");
+        db.run("INSERT INTO settings (key, value) VALUES ('popupMarginBottom', '85')");
+        db.run("INSERT INTO settings (key, value) VALUES ('popupGap', '10')");
+        db.run("INSERT INTO settings (key, value) VALUES ('edge', 'right')");
+        db.run("INSERT INTO settings (key, value) VALUES ('yPosition', '115')");
       }
     });
   });
@@ -284,8 +311,20 @@ export function resetSettings() {
         db.run("INSERT INTO settings (key, value) VALUES ('theme', 'escuro')");
         db.run("INSERT INTO settings (key, value) VALUES ('delay', '1000')");
         db.run("INSERT INTO settings (key, value) VALUES ('startOnWindows', 'false')");
+        db.run("INSERT INTO settings (key, value) VALUES ('enablePomodoro', 'false')");
+        db.run("INSERT INTO settings (key, value) VALUES ('enableNotes', 'false')");
         db.run("INSERT INTO settings (key, value) VALUES ('enableTasks', 'true')");
         db.run("INSERT INTO settings (key, value) VALUES ('enableReminders', 'true')");
+        db.run("INSERT INTO settings (key, value) VALUES ('enableProgressBar', 'true')");
+        db.run("INSERT INTO settings (key, value) VALUES ('enableTags', 'true')");
+        db.run("INSERT INTO settings (key, value) VALUES ('pomodoroFocus', '25')");
+        db.run("INSERT INTO settings (key, value) VALUES ('pomodoroBreak', '5')");
+        db.run("INSERT INTO settings (key, value) VALUES ('pomodoroSound', 'sino')");
+        db.run("INSERT INTO settings (key, value) VALUES ('popupMarginRight', '12')");
+        db.run("INSERT INTO settings (key, value) VALUES ('popupMarginBottom', '85')");
+        db.run("INSERT INTO settings (key, value) VALUES ('popupGap', '10')");
+        db.run("INSERT INTO settings (key, value) VALUES ('edge', 'right')");
+        db.run("INSERT INTO settings (key, value) VALUES ('yPosition', '115')");
         resolve(true);
       }
     });
@@ -297,9 +336,11 @@ export function resetSettingsTab(tab) {
     let keysToDelete = [];
     
     if (tab === 'geral') {
-      keysToDelete = ['position', 'delay', 'startOnWindows', 'enableTasks', 'enableReminders', 'enableNotes', 'enableTags', 'taskSortOrder', 'pomodoroFocus', 'pomodoroBreak'];
+      keysToDelete = ['position', 'delay', 'startOnWindows', 'enableTasks', 'enableReminders', 'enableNotes', 'enableTags', 'enablePomodoro', 'enableProgressBar', 'taskSortOrder', 'pomodoroFocus', 'pomodoroBreak'];
     } else if (tab === 'aparencia') {
       keysToDelete = ['opacity', 'expandedOpacity', 'theme', 'colorR', 'colorG', 'colorB'];
+    } else if (tab === 'posicao') {
+      keysToDelete = ['popupMarginRight', 'popupMarginBottom', 'popupGap', 'edge', 'yPosition'];
     } else if (tab === 'audio') {
       keysToDelete = ['soundEnabled', 'soundVolume', 'soundType', 'pomodoroSound'];
     }
@@ -317,7 +358,19 @@ export function resetSettingsTab(tab) {
         'delay': '1000',
         'startOnWindows': 'false',
         'enableTasks': 'true',
-        'enableReminders': 'true'
+        'enableReminders': 'true',
+        'enablePomodoro': 'false',
+        'enableNotes': 'false',
+        'enableProgressBar': 'true',
+        'enableTags': 'true',
+        'pomodoroFocus': '25',
+        'pomodoroBreak': '5',
+        'pomodoroSound': 'sino',
+        'popupMarginRight': '12',
+        'popupMarginBottom': '85',
+        'popupGap': '10',
+        'edge': 'right',
+        'yPosition': '115'
       };
 
       keysToDelete.forEach(k => {
