@@ -592,14 +592,12 @@ function Widget() {
   const todaysCompletedCount = todaysTasks.filter(t => t.completed).length;
 
   return (
-    <div className="app-container" style={{ justifyContent: edge === 'left' ? 'flex-start' : 'flex-end' }} onPointerEnter={handlePointerEnter} onPointerLeave={handlePointerLeave}>
+    <div className="app-container" style={{ justifyContent: (!isExpanded || edge === 'left') ? 'flex-start' : 'flex-end' }} onPointerEnter={handlePointerEnter} onPointerLeave={handlePointerLeave}>
       {!isExpanded ? (
         <div className={`collapsed-bar edge-${edge}`} style={{ backgroundColor: `rgba(30, 30, 40, ${opacity})` }} />
       ) : (
       <div className="sidebar" style={{ 
         position: 'relative', 
-        paddingRight: edge === 'right' ? '14px' : '0', 
-        paddingLeft: edge === 'left' ? '14px' : '0',
         backgroundColor: `rgba(var(--bg-sidebar-rgb), ${expandedOpacity})`
       }}>
         {/* Trilho de arrasto dedicado */}

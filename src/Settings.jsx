@@ -31,7 +31,12 @@ function Settings() {
     setLocalSettings(prev => ({ ...prev, [key]: value }));
   };
 
-  const close = () => window.api?.closeWindow();
+  const close = () => {
+    if (window.api && localSettings.edge !== settings.edge) {
+      window.api.previewEdge(settings.edge);
+    }
+    window.api?.closeWindow();
+  };
 
   const handleSave = async () => {
     if (window.api) {
@@ -42,6 +47,10 @@ function Settings() {
         if (localSettings[key] !== settings[key]) {
           await window.api.updateSetting(key, localSettings[key]);
         }
+      }
+      
+      if (localSettings.edge && localSettings.edge !== settings.edge) {
+        window.api.previewEdge(localSettings.edge);
       }
       
       // Atualizar o estado da memória local para que novos salvamentos funcionem
@@ -267,70 +276,74 @@ function Settings() {
           {/* ABA POSICIONAMENTO */}
           {activeTab === 'posicao' && (
             <div>
-              <div className="setting-item">
-                <span>Posição Lateral do App</span>
-                <div className="segmented-control">
-                  <button 
-                    className={`segmented-btn ${localSettings.edge === 'left' ? 'active' : ''}`}
-                    onClick={() => updateLocalSetting('edge', 'left')}
-                  >Esquerda</button>
-                  <button 
-                    className={`segmented-btn ${localSettings.edge !== 'left' ? 'active' : ''}`}
-                    onClick={() => updateLocalSetting('edge', 'right')}
-                  >Direita</button>
+              <div style={{ marginBottom: '20px', paddingBottom: '15px', borderBottom: '1px solid var(--border)' }}>
+                <h4 style={{ marginBottom: '15px', color: 'var(--primary)' }}>Dashboard Principal</h4>
+                <div className="setting-item">
+                  <span>Posição Lateral do App</span>
+                  <div className="segmented-control">
+                    <button 
+                      className={`segmented-btn ${localSettings.edge === 'left' ? 'active' : ''}`}
+                      onClick={() => updateLocalSetting('edge', 'left')}
+                    >Esquerda</button>
+                    <button 
+                      className={`segmented-btn ${localSettings.edge !== 'left' ? 'active' : ''}`}
+                      onClick={() => updateLocalSetting('edge', 'right')}
+                    >Direita</button>
+                  </div>
+                </div>
+                
+                <div className="setting-item" style={{ borderBottom: 'none' }}>
+                  <span>Tempo para Ocultar (ms)</span>
+                  <input 
+                    type="number" 
+                    className="form-control" 
+                    style={{ width: '80px', padding: '4px 8px', textAlign: 'right' }} 
+                    value={localSettings.delay || 1000}
+                    onChange={(e) => updateLocalSetting('delay', e.target.value)}
+                  />
                 </div>
               </div>
 
-              <div className="setting-item" style={{ flexDirection: 'column', alignItems: 'flex-start', borderBottom: 'none' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', marginBottom: '10px' }}>
-                  <span>Posição dos Popups</span>
+              <div>
+                <h4 style={{ marginBottom: '15px', color: 'var(--primary)' }}>Popups (Lembretes e Pomodoro)</h4>
+                <div className="setting-item" style={{ borderBottom: 'none', marginBottom: '10px' }}>
+                  <span style={{ flex: 1, marginRight: '15px' }}>Ajustar Posição na Tela</span>
                   <button 
                     className="btn-primary" 
                     onClick={() => window.api?.startPopupPositioner()}
-                    style={{ padding: '6px 12px', fontSize: '0.8rem' }}
+                    style={{ width: 'auto', padding: '6px 16px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px' }}
                   >
-                    Ajustar na Tela
+                    <Move size={16} /> Ajustar Posição
                   </button>
                 </div>
-              </div>
+                
+                <div className="setting-item" style={{ flexDirection: 'column', alignItems: 'flex-start', backgroundColor: 'rgba(0,0,0,0.1)', padding: '15px', borderRadius: '8px', marginTop: '10px' }}>
+                  <span style={{ marginBottom: '10px', fontSize: '0.85rem', fontWeight: 'bold' }}>Testar Popups (Padronizados)</span>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', width: '100%', marginBottom: '15px', paddingBottom: '15px', borderBottom: '1px solid var(--border)' }}>
+                    <button className="btn-secondary" onClick={() => window.api?.showPopup({ type: 'reminder', id: `test-rem-${Date.now()}`, autoClose: 5000, data: { id: 'test', title: 'Lembrete de Teste', datetime: new Date().toISOString() } })}>Lembrete</button>
+                    <button className="btn-secondary" onClick={() => window.api?.showPopup({ type: 'pomodoro', id: `test-pomo-focus-${Date.now()}`, autoClose: 5000, title: 'Iniciando Foco', status: 'focus' })}>Pomo: Foco</button>
+                    <button className="btn-secondary" onClick={() => window.api?.showPopup({ type: 'pomodoro', id: `test-pomo-break-${Date.now()}`, autoClose: 5000, title: 'Iniciando Descanso', status: 'break' })}>Pomo: Descanso</button>
+                    <button className="btn-secondary" onClick={() => window.api?.showPopup({ type: 'pomodoro', id: `test-pomo-idle-${Date.now()}`, autoClose: 5000, title: 'Descanso Finalizado', status: 'idle' })}>Pomo: Finalizado</button>
+                  </div>
 
-              <div className="setting-item" style={{ flexDirection: 'column', alignItems: 'flex-start', backgroundColor: 'rgba(0,0,0,0.1)', padding: '15px', borderRadius: '8px', marginTop: '10px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: '15px', paddingBottom: '15px', borderBottom: '1px solid var(--border)' }}>
-                  <span style={{ fontSize: '0.85rem' }}>Distância no empilhamento (px)</span>
-                  <input 
-                    type="number" 
-                    min="0"
-                    max="100"
-                    className="form-control"
-                    style={{ width: '60px', padding: '4px', textAlign: 'center' }}
-                    value={localSettings.popupGap !== undefined ? localSettings.popupGap : 4}
-                    onChange={(e) => setLocalSettings({...localSettings, popupGap: parseInt(e.target.value) || 0})}
-                  />
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                    <span style={{ fontSize: '0.85rem' }}>Distância no empilhamento (px)</span>
+                    <input 
+                      type="number" 
+                      min="0"
+                      max="100"
+                      className="form-control"
+                      style={{ width: '60px', padding: '4px', textAlign: 'center' }}
+                      value={localSettings.popupGap !== undefined ? localSettings.popupGap : 4}
+                      onChange={(e) => setLocalSettings({...localSettings, popupGap: parseInt(e.target.value) || 0})}
+                    />
+                  </div>
                 </div>
-                <span style={{ marginBottom: '10px', fontSize: '0.85rem', fontWeight: 'bold' }}>Testar Popups (Padronizados)</span>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', width: '100%' }}>
-                  <button className="btn-secondary" onClick={() => window.api?.showPopup({ type: 'reminder', id: `test-rem-${Math.random()}`, autoClose: 5000, data: { id: 'test', title: 'Lembrete de Teste', datetime: new Date().toISOString() } })}>Lembrete</button>
-                  <button className="btn-secondary" onClick={() => window.api?.showPopup({ type: 'pomodoro', id: `test-pomo-focus-${Math.random()}`, autoClose: 5000, title: 'Iniciando Foco', status: 'focus' })}>Pomo: Foco</button>
-                  <button className="btn-secondary" onClick={() => window.api?.showPopup({ type: 'pomodoro', id: `test-pomo-break-${Math.random()}`, autoClose: 5000, title: 'Iniciando Descanso', status: 'break' })}>Pomo: Descanso</button>
-                  <button className="btn-secondary" onClick={() => window.api?.showPopup({ type: 'pomodoro', id: `test-pomo-idle-${Math.random()}`, autoClose: 5000, title: 'Descanso Finalizado', status: 'idle' })}>Pomo: Finalizado</button>
-                </div>
-              </div>
-
-
-            <div className="setting-item" style={{ borderBottom: 'none' }}>
-                <span>Delay de Recolhimento (ms)</span>
-                <input 
-                  type="number" 
-                  className="form-control" 
-                  style={{ width: '80px', padding: '4px 8px', textAlign: 'right' }} 
-                  value={localSettings.delay || 1000}
-                  onChange={(e) => updateLocalSetting('delay', e.target.value)}
-                />
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'center', marginTop: '20px' }}>
-                <button className="btn-secondary" onClick={() => handleResetTab('aparencia')} style={{ color: 'var(--danger)', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                  <RotateCcw size={14} /> Restaurar Padrões de Aparência
+                <button className="btn-secondary" onClick={() => handleResetTab('posicao')} style={{ color: 'var(--danger)', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <RotateCcw size={14} /> Restaurar Padrões de Posicionamento
                 </button>
               </div>
             </div>

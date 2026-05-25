@@ -295,7 +295,7 @@ function Popup() {
         // Som de notificação
         if ((data.type === 'reminder' || data.type === 'pomodoro') && window.api) {
           window.api.getSettings().then(s => {
-            if (s.soundEnabled !== 'false') {
+            if (s.soundEnabled !== 'false' && s.soundEnabled !== false) {
               const vol = s.soundVolume ? parseInt(s.soundVolume) / 100 : 0.8;
               const type = data.type === 'pomodoro' ? (s.pomodoroSound || 'duplo') : (s.soundType || 'duplo');
               playNotificationSound(vol, type);

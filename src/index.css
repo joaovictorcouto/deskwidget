@@ -571,3 +571,6 @@ body {
   width: 1px;
   background-color: var(--border);
 }
+
+input[type='range'] { accent-color: var(--primary); }
+

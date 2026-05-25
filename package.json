@@ -2,56 +2,33 @@
   "name": "deskwidget",
   "private": true,
   "version": "1.0.0",
-  "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "dist": "vite build && electron-builder --win"
-  },
-  "build": {
-    "appId": "com.deskwidget.app",
-    "productName": "DeskWidget",
-    "directories": {
-      "output": "dist-electron/release"
-    },
-    "win": {
-      "target": "nsis",
-      "icon": "public/logo-icon.png"
-    },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
-      "runAfterFinish": true
-    },
-    "npmRebuild": false
+    "tauri": "tauri"
   },
   "dependencies": {
     "@hello-pangea/dnd": "^18.0.1",
+    "@tauri-apps/api": "^2.11.0",
+    "@tauri-apps/plugin-window-state": "^2.4.1",
     "lucide-react": "^1.16.0",
     "react": "^19.2.6",
-    "react-dom": "^19.2.6",
-    "sqlite3": "^6.0.1"
+    "react-dom": "^19.2.6"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@tauri-apps/cli": "^2.11.2",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
-    "concurrently": "^9.2.1",
-    "cross-env": "^10.1.0",
-    "electron": "^42.2.0",
-    "electron-builder": "^26.8.1",
     "esbuild": "^0.28.0",
     "eslint": "^10.3.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17.6.0",
-    "vite": "^8.0.12",
-    "vite-plugin-electron": "^0.29.1",
-    "vite-plugin-electron-renderer": "^0.14.7",
-    "wait-on": "^9.0.10"
+    "vite": "^8.0.12"
   },
   "author": "Couto Apps",
   "description": "DeskWidget by Couto Apps"

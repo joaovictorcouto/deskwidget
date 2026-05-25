@@ -1,31 +1,15 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import electron from 'vite-plugin-electron'
-import renderer from 'vite-plugin-electron-renderer'
 
-// https://vite.dev/config/
-export default defineConfig({
-  base: './',
-  plugins: [
-    react(),
-    electron([
-      {
-        entry: 'electron/main.js',
-        vite: {
-          build: {
-            rollupOptions: {
-              external: ['sqlite3']
-            }
-          }
-        }
-      },
-      {
-        entry: 'electron/preload.js',
-        onstart(options) {
-          options.reload()
-        },
-      },
-    ]),
-    renderer(),
-  ],
-})
+// https://vitejs.dev/config/
+export default defineConfig(async () => ({
+  plugins: [react()],
+  clearScreen: false,
+  server: {
+    port: 1420,
+    strictPort: true,
+    watch: {
+      ignored: ["**/src-tauri/**"],
+    },
+  },
+}));
