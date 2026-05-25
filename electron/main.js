@@ -534,6 +534,8 @@ ipcMain.on('start-popup-positioner', async () => {
   });
 
   const config = { id: 'positioner', type: 'positioner', height: pHeight };
+  popupWindows.push({ window: positionerWin, id: config.id, height: pHeight });
+  
   const encodedData = encodeURIComponent(JSON.stringify(config));
   const url = process.env.VITE_DEV_SERVER_URL 
     ? `${process.env.VITE_DEV_SERVER_URL}#/popup?config=${encodedData}` 
@@ -567,7 +569,7 @@ ipcMain.on('start-popup-positioner', async () => {
   });
 
   positionerWin.on('closed', () => {
-    // Não precisa filtrar de popupWindows pois não está na lista
+    popupWindows = popupWindows.filter(pw => pw.id !== 'positioner');
   });
   
   // Envia margins atuais ao popup

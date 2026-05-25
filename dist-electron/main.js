@@ -74,11 +74,38 @@ function initDb() {
 					db.run("INSERT INTO settings (key, value) VALUES ('startOnWindows', 'false')");
 					db.run("INSERT INTO settings (key, value) VALUES ('enablePomodoro', 'false')");
 					db.run("INSERT INTO settings (key, value) VALUES ('enableNotes', 'false')");
-					db.run("INSERT INTO settings (key, value) VALUES ('enableProgressBar', 'false')");
-					db.run("INSERT INTO settings (key, value) VALUES ('enableTags', 'false')");
+					db.run("INSERT INTO settings (key, value) VALUES ('enableTasks', 'true')");
+					db.run("INSERT INTO settings (key, value) VALUES ('enableReminders', 'true')");
+					db.run("INSERT INTO settings (key, value) VALUES ('enableProgressBar', 'true')");
+					db.run("INSERT INTO settings (key, value) VALUES ('enableTags', 'true')");
 					db.run("INSERT INTO settings (key, value) VALUES ('pomodoroFocus', '25')");
 					db.run("INSERT INTO settings (key, value) VALUES ('pomodoroBreak', '5')");
 					db.run("INSERT INTO settings (key, value) VALUES ('pomodoroSound', 'sino')");
+					db.run("INSERT INTO settings (key, value) VALUES ('popupMarginRight', '12')");
+					db.run("INSERT INTO settings (key, value) VALUES ('popupMarginBottom', '85')");
+					db.run("INSERT INTO settings (key, value) VALUES ('popupGap', '10')");
+					db.run("INSERT INTO settings (key, value) VALUES ('edge', 'right')");
+					db.run("INSERT INTO settings (key, value) VALUES ('yPosition', '115')");
+					db.run("INSERT INTO settings (key, value) VALUES ('enableProgressBar', 'true')");
+					db.run("INSERT INTO settings (key, value) VALUES ('enableTags', 'true')");
+					db.run("INSERT INTO settings (key, value) VALUES ('pomodoroFocus', '25')");
+					db.run("INSERT INTO settings (key, value) VALUES ('pomodoroBreak', '5')");
+					db.run("INSERT INTO settings (key, value) VALUES ('pomodoroSound', 'sino')");
+					db.run("INSERT INTO settings (key, value) VALUES ('popupMarginRight', '12')");
+					db.run("INSERT INTO settings (key, value) VALUES ('popupMarginBottom', '85')");
+					db.run("INSERT INTO settings (key, value) VALUES ('popupGap', '10')");
+					db.run("INSERT INTO settings (key, value) VALUES ('edge', 'right')");
+					db.run("INSERT INTO settings (key, value) VALUES ('yPosition', '115')");
+					db.run("INSERT INTO settings (key, value) VALUES ('enableProgressBar', 'true')");
+					db.run("INSERT INTO settings (key, value) VALUES ('enableTags', 'true')");
+					db.run("INSERT INTO settings (key, value) VALUES ('pomodoroFocus', '25')");
+					db.run("INSERT INTO settings (key, value) VALUES ('pomodoroBreak', '5')");
+					db.run("INSERT INTO settings (key, value) VALUES ('pomodoroSound', 'sino')");
+					db.run("INSERT INTO settings (key, value) VALUES ('popupMarginRight', '12')");
+					db.run("INSERT INTO settings (key, value) VALUES ('popupMarginBottom', '85')");
+					db.run("INSERT INTO settings (key, value) VALUES ('popupGap', '10')");
+					db.run("INSERT INTO settings (key, value) VALUES ('edge', 'right')");
+					db.run("INSERT INTO settings (key, value) VALUES ('yPosition', '115')");
 				}
 			});
 		});
@@ -311,8 +338,20 @@ function resetSettings() {
 				db.run("INSERT INTO settings (key, value) VALUES ('theme', 'escuro')");
 				db.run("INSERT INTO settings (key, value) VALUES ('delay', '1000')");
 				db.run("INSERT INTO settings (key, value) VALUES ('startOnWindows', 'false')");
+				db.run("INSERT INTO settings (key, value) VALUES ('enablePomodoro', 'false')");
+				db.run("INSERT INTO settings (key, value) VALUES ('enableNotes', 'false')");
 				db.run("INSERT INTO settings (key, value) VALUES ('enableTasks', 'true')");
 				db.run("INSERT INTO settings (key, value) VALUES ('enableReminders', 'true')");
+				db.run("INSERT INTO settings (key, value) VALUES ('enableProgressBar', 'true')");
+				db.run("INSERT INTO settings (key, value) VALUES ('enableTags', 'true')");
+				db.run("INSERT INTO settings (key, value) VALUES ('pomodoroFocus', '25')");
+				db.run("INSERT INTO settings (key, value) VALUES ('pomodoroBreak', '5')");
+				db.run("INSERT INTO settings (key, value) VALUES ('pomodoroSound', 'sino')");
+				db.run("INSERT INTO settings (key, value) VALUES ('popupMarginRight', '12')");
+				db.run("INSERT INTO settings (key, value) VALUES ('popupMarginBottom', '85')");
+				db.run("INSERT INTO settings (key, value) VALUES ('popupGap', '10')");
+				db.run("INSERT INTO settings (key, value) VALUES ('edge', 'right')");
+				db.run("INSERT INTO settings (key, value) VALUES ('yPosition', '115')");
 				resolve(true);
 			}
 		});
@@ -329,6 +368,8 @@ function resetSettingsTab(tab) {
 			"enableReminders",
 			"enableNotes",
 			"enableTags",
+			"enablePomodoro",
+			"enableProgressBar",
 			"taskSortOrder",
 			"pomodoroFocus",
 			"pomodoroBreak"
@@ -340,6 +381,13 @@ function resetSettingsTab(tab) {
 			"colorR",
 			"colorG",
 			"colorB"
+		];
+		else if (tab === "posicao") keysToDelete = [
+			"popupMarginRight",
+			"popupMarginBottom",
+			"popupGap",
+			"edge",
+			"yPosition"
 		];
 		else if (tab === "audio") keysToDelete = [
 			"soundEnabled",
@@ -358,7 +406,19 @@ function resetSettingsTab(tab) {
 				"delay": "1000",
 				"startOnWindows": "false",
 				"enableTasks": "true",
-				"enableReminders": "true"
+				"enableReminders": "true",
+				"enablePomodoro": "false",
+				"enableNotes": "false",
+				"enableProgressBar": "true",
+				"enableTags": "true",
+				"pomodoroFocus": "25",
+				"pomodoroBreak": "5",
+				"pomodoroSound": "sino",
+				"popupMarginRight": "12",
+				"popupMarginBottom": "85",
+				"popupGap": "10",
+				"edge": "right",
+				"yPosition": "115"
 			};
 			keysToDelete.forEach((k) => {
 				if (defaults[k]) db.run("INSERT INTO settings (key, value) VALUES (?, ?)", [k, defaults[k]]);
@@ -388,6 +448,7 @@ function saveWindowConfig(name, bounds) {
 	}
 }
 var mainWindow;
+var iconPath = process.env.VITE_DEV_SERVER_URL ? node_path.default.join(__dirname, "../public/logo-icon.png") : node_path.default.join(__dirname, "../dist/logo-icon.png");
 var tray = null;
 var EXPANDED_WIDTH = 350;
 var COLLAPSED_WIDTH = 8;
@@ -402,6 +463,7 @@ async function createWindow() {
 	const { x, y, width, height } = electron.screen.getPrimaryDisplay().workArea;
 	let startY = currentYPos === 0 ? Math.floor(y + (height - COLLAPSED_HEIGHT) / 2) : currentYPos;
 	mainWindow = new electron.BrowserWindow({
+		icon: iconPath,
 		width: COLLAPSED_WIDTH,
 		height: COLLAPSED_HEIGHT,
 		x: currentEdge === "left" ? x : x + width - COLLAPSED_WIDTH,
@@ -430,9 +492,9 @@ else {
 			mainWindow.webContents.send("force-expand");
 		}
 	});
+	electron.app.commandLine.appendSwitch("disable-site-isolation-trials");
 	electron.app.whenReady().then(() => {
 		createWindow();
-		const iconPath = process.env.VITE_DEV_SERVER_URL ? node_path.default.join(__dirname, "../public/logo-icon.png") : node_path.default.join(__dirname, "../dist/logo-icon.png");
 		tray = new electron.Tray(electron.nativeImage.createFromPath(iconPath));
 		const contextMenu = electron.Menu.buildFromTemplate([
 			{
@@ -659,10 +721,11 @@ else {
 		}
 		const savedSettings = getWindowConfig().settingsWindow || {};
 		settingsWindow = new electron.BrowserWindow({
-			width: savedSettings.width || 400,
-			height: savedSettings.height || 630,
-			minWidth: 350,
-			minHeight: 500,
+			icon: iconPath,
+			width: savedSettings.width || 560,
+			height: savedSettings.height || 680,
+			minWidth: 560,
+			minHeight: 680,
 			frame: false,
 			transparent: true,
 			webPreferences: { preload: node_path.default.join(__dirname, "preload.js") }
@@ -692,10 +755,11 @@ else {
 		}
 		const savedHistory = getWindowConfig().historyWindow || {};
 		historyWindow = new electron.BrowserWindow({
-			width: savedHistory.width || 450,
-			height: savedHistory.height || 500,
-			minWidth: 400,
-			minHeight: 400,
+			icon: iconPath,
+			width: savedHistory.width || 500,
+			height: savedHistory.height || 600,
+			minWidth: 500,
+			minHeight: 600,
 			frame: false,
 			transparent: true,
 			webPreferences: { preload: node_path.default.join(__dirname, "preload.js") }
@@ -742,6 +806,7 @@ else {
 		});
 		const pY = y + height - marginBottom - pHeight - accumulatedHeight;
 		let newPopupWindow = new electron.BrowserWindow({
+			icon: iconPath,
 			width: pWidth,
 			height: pHeight,
 			x: x + width - pWidth - marginRight,
@@ -798,6 +863,7 @@ else {
 		const pX = Math.min(sx + sw - pWidth - marginRight, sx + sw - pWidth);
 		const pY = Math.min(sy + sh - pHeight - marginBottom, sy + sh - pHeight);
 		let positionerWin = new electron.BrowserWindow({
+			icon: iconPath,
 			width: pWidth,
 			height: pHeight,
 			x: Math.max(sx, pX),
@@ -809,11 +875,17 @@ else {
 			hasShadow: false,
 			webPreferences: { preload: node_path.default.join(__dirname, "preload.js") }
 		});
-		const encodedData = encodeURIComponent(JSON.stringify({
+		const config = {
 			id: "positioner",
 			type: "positioner",
 			height: pHeight
-		}));
+		};
+		popupWindows.push({
+			window: positionerWin,
+			id: config.id,
+			height: pHeight
+		});
+		const encodedData = encodeURIComponent(JSON.stringify(config));
 		const url = process.env.VITE_DEV_SERVER_URL ? `${process.env.VITE_DEV_SERVER_URL}#/popup?config=${encodedData}` : `file://${node_path.default.join(__dirname, "../dist/index.html")}#/popup?config=${encodedData}`;
 		positionerWin.loadURL(url);
 		let isClamping = false;
@@ -844,7 +916,9 @@ else {
 				maxBottom
 			});
 		});
-		positionerWin.on("closed", () => {});
+		positionerWin.on("closed", () => {
+			popupWindows = popupWindows.filter((pw) => pw.id !== "positioner");
+		});
 		positionerWin.webContents.on("did-finish-load", () => {
 			const maxRight = sw - pWidth;
 			const maxBottom = sh - pHeight;

@@ -136,23 +136,11 @@ function Settings() {
                              value={localSettings.pomodoroFocus || '25'} 
                              onChange={(e) => updateLocalSetting('pomodoroFocus', e.target.value)} />
                     </div>
-                    <div className="setting-item" style={{ marginBottom: '10px' }}>
+                    <div className="setting-item" style={{ marginBottom: 0 }}>
                       <span>Descanso (min)</span>
                       <input type="number" className="form-control" style={{ width: '70px', padding: '4px' }} 
                              value={localSettings.pomodoroBreak || '5'} 
                              onChange={(e) => updateLocalSetting('pomodoroBreak', e.target.value)} />
-                    </div>
-                    <div className="setting-item" style={{ marginBottom: 0 }}>
-                      <span>Som de Alarme</span>
-                      <select className="form-control" style={{ width: '120px', padding: '4px' }}
-                              value={localSettings.pomodoroSound || 'sino'}
-                              onChange={(e) => updateLocalSetting('pomodoroSound', e.target.value)}>
-                        <option value="sino">Sino</option>
-                        <option value="suave">Toque Suave</option>
-                        <option value="bolha">Bolha Pop</option>
-                        <option value="marimba">Marimba</option>
-                        <option value="duplo">Toque Duplo</option>
-                      </select>
                     </div>
                   </div>
                 )}
@@ -378,33 +366,63 @@ function Settings() {
                 </div>
 
                 <div className="setting-item">
-                  <span>Tipo de Som</span>
-                  <select 
-                    className="form-control"
-                    style={{ width: '120px', padding: '4px 8px' }}
-                    value={localSettings.soundType || 'sino'}
-                    onChange={(e) => updateLocalSetting('soundType', e.target.value)}
-                  >
-                    <option value="sino">Sino (Padrão)</option>
-                    <option value="suave">Toque Suave</option>
-                    <option value="bolha">Bolha Pop</option>
-                    <option value="marimba">Marimba</option>
-                    <option value="duplo">Toque Duplo</option>
-                  </select>
+                  <span>Tipo de Som (Lembretes)</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <button 
+                      className="btn-secondary" 
+                      style={{ padding: '4px 8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                      onClick={() => {
+                        const vol = localSettings.soundVolume ? parseInt(localSettings.soundVolume) / 100 : 0.8;
+                        const type = localSettings.soundType || 'duplo';
+                        playNotificationSound(vol, type);
+                      }}
+                      title="Testar Som"
+                    >
+                      <Volume2 size={14} />
+                    </button>
+                    <select 
+                      className="form-control"
+                      style={{ width: '120px', padding: '4px 8px' }}
+                      value={localSettings.soundType || 'duplo'}
+                      onChange={(e) => updateLocalSetting('soundType', e.target.value)}
+                    >
+                      <option value="bolha">Bolha Pop</option>
+                      <option value="marimba">Marimba</option>
+                      <option value="sino">Sino</option>
+                      <option value="duplo">Toque Duplo</option>
+                      <option value="suave">Toque Suave</option>
+                    </select>
+                  </div>
                 </div>
 
-                <div style={{ display: 'flex', justifyContent: 'center', marginTop: '20px' }}>
-                  <button 
-                    className="btn-secondary" 
-                    style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
-                    onClick={() => {
-                      const vol = localSettings.soundVolume ? parseInt(localSettings.soundVolume) / 100 : 0.8;
-                      const type = localSettings.soundType || 'sino';
-                      playNotificationSound(vol, type);
-                    }}
-                  >
-                    <Volume2 size={16} /> Testar Som Selecionado
-                  </button>
+                <div className="setting-item">
+                  <span>Som de Alarme (Pomodoro)</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <button 
+                      className="btn-secondary" 
+                      style={{ padding: '4px 8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                      onClick={() => {
+                        const vol = localSettings.soundVolume ? parseInt(localSettings.soundVolume) / 100 : 0.8;
+                        const type = localSettings.pomodoroSound || 'duplo';
+                        playNotificationSound(vol, type);
+                      }}
+                      title="Testar Som"
+                    >
+                      <Volume2 size={14} />
+                    </button>
+                    <select 
+                      className="form-control"
+                      style={{ width: '120px', padding: '4px 8px' }}
+                      value={localSettings.pomodoroSound || 'duplo'}
+                      onChange={(e) => updateLocalSetting('pomodoroSound', e.target.value)}
+                    >
+                      <option value="bolha">Bolha Pop</option>
+                      <option value="marimba">Marimba</option>
+                      <option value="sino">Sino</option>
+                      <option value="duplo">Toque Duplo</option>
+                      <option value="suave">Toque Suave</option>
+                    </select>
+                  </div>
                 </div>
               </div>
 

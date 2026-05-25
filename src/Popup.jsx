@@ -171,6 +171,51 @@ function PomodoroPopup({ config }) {
 }
 
 // ─── Popup do Posicionador ────────────────────────────────────────────────────
+const SpinnerCol = ({ label, value, maxVal, onUpdate }) => {
+  const noDrag = { WebkitAppRegion: 'no-drag' };
+  // Estado local para digitação sem mover a janela em tempo real
+  const [localVal, setLocalVal] = useState(value.toString());
+
+  // Sincroniza o input quando a janela é movida (arrastada) ou o valor externo muda
+  useEffect(() => { setLocalVal(value.toString()); }, [value]);
+
+  const applyValue = () => {
+    const parsed = parseInt(localVal);
+    if (!isNaN(parsed)) {
+      onUpdate(parsed);
+    } else {
+      setLocalVal(value.toString());
+    }
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', ...noDrag }}>
+      <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+        <input
+          type="text" 
+          style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', color: 'var(--text-main)', borderRadius: '5px', padding: '4px 2px', width: '45px', textAlign: 'center', fontSize: '0.9rem', fontWeight: 'bold', outline: 'none', ...noDrag }}
+          value={localVal}
+          onChange={(e) => setLocalVal(e.target.value.replace(/[^0-9]/g, ''))}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') applyValue();
+          }}
+          onBlur={applyValue}
+          onWheel={(e) => { e.preventDefault(); onUpdate(value + (e.deltaY < 0 ? 1 : -1)); }}
+        />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+          <button onClick={() => onUpdate(value + 1)} style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '3px', cursor: 'pointer', padding: '1px 3px', color: 'var(--text-main)', display: 'flex', alignItems: 'center', justifyContent: 'center', height: '14px', ...noDrag }}>
+            <ChevronUp size={10} />
+          </button>
+          <button onClick={() => onUpdate(value - 1)} style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '3px', cursor: 'pointer', padding: '1px 3px', color: 'var(--text-main)', display: 'flex', alignItems: 'center', justifyContent: 'center', height: '14px', ...noDrag }}>
+            <ChevronDown size={10} />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 function PositionerPopup() {
   const [right, setRight] = useState(20);
   const [bottom, setBottom] = useState(20);
@@ -205,51 +250,6 @@ function PositionerPopup() {
   };
 
   const noDrag = { WebkitAppRegion: 'no-drag' };
-  
-  // Componente unificado estilo Spinbox
-  const SpinnerCol = ({ label, value, maxVal, onUpdate }) => {
-    // Estado local para digitação sem mover a janela em tempo real
-    const [localVal, setLocalVal] = useState(value.toString());
-
-    // Sincroniza o input quando a janela é movida (arrastada) ou o valor externo muda
-    useEffect(() => { setLocalVal(value.toString()); }, [value]);
-
-    const applyValue = () => {
-      const parsed = parseInt(localVal);
-      if (!isNaN(parsed)) {
-        onUpdate(parsed);
-      } else {
-        setLocalVal(value.toString());
-      }
-    };
-
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', ...noDrag }}>
-        <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
-          <input
-            type="text" 
-            style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', color: 'var(--text-main)', borderRadius: '5px', padding: '4px 2px', width: '45px', textAlign: 'center', fontSize: '0.9rem', fontWeight: 'bold', outline: 'none', ...noDrag }}
-            value={localVal}
-            onChange={(e) => setLocalVal(e.target.value.replace(/[^0-9]/g, ''))}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') applyValue();
-            }}
-            onBlur={applyValue}
-            onWheel={(e) => { e.preventDefault(); onUpdate(value + (e.deltaY < 0 ? 1 : -1)); }}
-          />
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-            <button onClick={() => onUpdate(value + 1)} style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '3px', cursor: 'pointer', padding: '1px 3px', color: 'var(--text-main)', display: 'flex', alignItems: 'center', justifyContent: 'center', height: '14px', ...noDrag }}>
-              <ChevronUp size={10} />
-            </button>
-            <button onClick={() => onUpdate(value - 1)} style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: '3px', cursor: 'pointer', padding: '1px 3px', color: 'var(--text-main)', display: 'flex', alignItems: 'center', justifyContent: 'center', height: '14px', ...noDrag }}>
-              <ChevronDown size={10} />
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  };
 
   return (
     <PopupShell
@@ -297,7 +297,7 @@ function Popup() {
           window.api.getSettings().then(s => {
             if (s.soundEnabled !== 'false') {
               const vol = s.soundVolume ? parseInt(s.soundVolume) / 100 : 0.8;
-              const type = data.type === 'pomodoro' ? (s.pomodoroSound || 'sino') : (s.soundType || 'sino');
+              const type = data.type === 'pomodoro' ? (s.pomodoroSound || 'duplo') : (s.soundType || 'duplo');
               playNotificationSound(vol, type);
             }
           });
