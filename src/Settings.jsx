@@ -82,24 +82,24 @@ function Settings() {
       <div className="window-content" style={{ padding: '0', display: 'flex', flexDirection: 'column', height: '100%' }}>
         
         {/* TAB HEADER */}
-        <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', backgroundColor: 'rgba(0,0,0,0.2)' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', gap: '10px', borderBottom: '1px solid var(--border)', backgroundColor: 'rgba(0,0,0,0.2)' }}>
           <button 
-            style={{ flex: 1, padding: '10px 0', border: 'none', background: 'transparent', color: activeTab === 'geral' ? 'var(--primary)' : 'var(--text-muted)', borderBottom: activeTab === 'geral' ? '2px solid var(--primary)' : '2px solid transparent', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '5px' }}
+            style={{ padding: '10px 15px', border: 'none', background: 'transparent', color: activeTab === 'geral' ? 'var(--primary)' : 'var(--text-muted)', borderBottom: activeTab === 'geral' ? '2px solid var(--primary)' : '2px solid transparent', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '6px' }}
             onClick={() => setActiveTab('geral')}
           ><SettingsIcon size={14} /> Geral</button>
           
           <button 
-            style={{ flex: 1, padding: '10px 0', border: 'none', background: 'transparent', color: activeTab === 'aparencia' ? 'var(--primary)' : 'var(--text-muted)', borderBottom: activeTab === 'aparencia' ? '2px solid var(--primary)' : '2px solid transparent', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '5px' }}
+            style={{ padding: '10px 15px', border: 'none', background: 'transparent', color: activeTab === 'aparencia' ? 'var(--primary)' : 'var(--text-muted)', borderBottom: activeTab === 'aparencia' ? '2px solid var(--primary)' : '2px solid transparent', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '6px' }}
             onClick={() => setActiveTab('aparencia')}
           ><Palette size={14} /> Aparência</button>
 
           <button 
-            style={{ flex: 1, padding: '10px 0', border: 'none', background: 'transparent', color: activeTab === 'audio' ? 'var(--primary)' : 'var(--text-muted)', borderBottom: activeTab === 'audio' ? '2px solid var(--primary)' : '2px solid transparent', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '5px' }}
+            style={{ padding: '10px 15px', border: 'none', background: 'transparent', color: activeTab === 'audio' ? 'var(--primary)' : 'var(--text-muted)', borderBottom: activeTab === 'audio' ? '2px solid var(--primary)' : '2px solid transparent', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '6px' }}
             onClick={() => setActiveTab('audio')}
           ><Volume2 size={14} /> Áudio</button>
 
           <button 
-            style={{ flex: 1, padding: '10px 0', border: 'none', background: 'transparent', color: activeTab === 'posicao' ? 'var(--primary)' : 'var(--text-muted)', borderBottom: activeTab === 'posicao' ? '2px solid var(--primary)' : '2px solid transparent', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '5px' }}
+            style={{ padding: '10px 15px', border: 'none', background: 'transparent', color: activeTab === 'posicao' ? 'var(--primary)' : 'var(--text-muted)', borderBottom: activeTab === 'posicao' ? '2px solid var(--primary)' : '2px solid transparent', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '6px' }}
             onClick={() => setActiveTab('posicao')}
           ><Move size={14} /> Posicionamento</button>
         </div>
