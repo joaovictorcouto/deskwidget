@@ -238,6 +238,32 @@ function Settings() {
               </div>
 
               <div className="setting-item" style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
+                <span style={{ marginBottom: '15px' }}>Cor de Destaque</span>
+                <div style={{ display: 'flex', gap: '12px' }}>
+                  {['#5c85ff', '#ff5c5c', '#5cff85', '#ffb85c', '#bd5cff'].map(color => {
+                    const isActive = localSettings.themeColor === color || (!localSettings.themeColor && color === '#5c85ff');
+                    return (
+                      <div 
+                        key={color}
+                        onClick={() => updateLocalSetting('themeColor', color)}
+                        style={{
+                          width: '26px',
+                          height: '26px',
+                          borderRadius: '50%',
+                          backgroundColor: color,
+                          cursor: 'pointer',
+                          border: isActive ? '2px solid var(--bg-card)' : '2px solid transparent',
+                          boxShadow: isActive ? `0 0 0 2px ${color}` : '0 2px 5px rgba(0,0,0,0.2)',
+                          transition: 'all 0.2s ease',
+                          transform: isActive ? 'scale(1.1)' : 'scale(1)'
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="setting-item" style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', marginBottom: '10px' }}>
                   <span>Opacidade do Dock Lateral</span>
                   <span>{localSettings.opacity || 90}%</span>

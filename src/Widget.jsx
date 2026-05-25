@@ -598,7 +598,9 @@ function Widget() {
       ) : (
       <div className="sidebar" style={{ 
         position: 'relative', 
-        backgroundColor: `rgba(var(--bg-sidebar-rgb), ${expandedOpacity})`
+        backgroundColor: `rgba(var(--bg-sidebar-rgb), ${expandedOpacity})`,
+        paddingRight: edge === 'right' ? '14px' : '0',
+        paddingLeft: edge === 'left' ? '14px' : '0'
       }}>
         {/* Trilho de arrasto dedicado */}
         <div 
