@@ -1,7 +1,7 @@
 {
   "name": "deskwidget",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
@@ -52,5 +52,7 @@
     "vite-plugin-electron": "^0.29.1",
     "vite-plugin-electron-renderer": "^0.14.7",
     "wait-on": "^9.0.10"
-  }
+  },
+  "author": "Couto Apps",
+  "description": "DeskWidget by Couto Apps"
 }

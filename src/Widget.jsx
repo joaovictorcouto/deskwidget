@@ -628,7 +628,7 @@ function Widget() {
           }} 
         />
         <div className="header" style={{ padding: '10px 15px', display: 'flex', alignItems: 'center' }}>
-          <img src={logoDesk} alt="DeskWidget" style={{ height: '24px', objectFit: 'contain' }} onError={(e) => { e.target.style.display = 'none'; document.getElementById('fallback-logo-text').style.display = 'block'; }} />
+          <img src="./logo-desk.png" alt="DeskWidget" style={{ height: '24px', objectFit: 'contain' }} onError={(e) => { e.target.style.display = 'none'; document.getElementById('fallback-logo-text').style.display = 'block'; }} />
           <h1 id="fallback-logo-text" style={{ display: 'none', margin: 0, fontSize: '1rem', fontWeight: 600 }}>DeskWidget</h1>
           <button className="icon-btn" onClick={openSettings} style={{ marginLeft: 'auto' }}>
             <Settings size={18} />

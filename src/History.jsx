@@ -103,7 +103,7 @@ function History() {
     <div className="standalone-window">
       <div className="window-header">
         <div style={{ display: 'flex', alignItems: 'center' }}>
-          <img src={logoIcon} alt="Logo" style={{ height: '18px', marginRight: '8px', objectFit: 'contain' }} onError={(e) => e.target.style.display = 'none'} />
+          <img src="./logo-icon.png" alt="Logo" style={{ height: '18px', marginRight: '8px', objectFit: 'contain' }} onError={(e) => e.target.style.display = 'none'} />
           <span style={{ fontSize: '0.9rem', fontWeight: 600 }}>Histórico de Lembretes</span>
         </div>
         <button className="close-btn" onClick={close}><X size={18} /></button>
