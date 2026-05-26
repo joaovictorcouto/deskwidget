@@ -1414,7 +1414,7 @@ function Widget() {
                 <span>NOTAS RÁPIDAS</span>
               </span>
             </div>
-            <div className="scrollable-content" style={{ paddingBottom: '10px' }}>
+            <div className="scrollable-content" style={{ paddingBottom: '10px', overflow: 'hidden' }}>
               <textarea 
                 className="form-control"
                 style={{ height: '100%', resize: 'none', backgroundColor: 'var(--bg-main)', overflow: quickNote ? 'auto' : 'hidden' }}

@@ -233,8 +233,8 @@ pub fn delete_task(
 #[tauri::command]
 pub fn update_task_tag(
     old_tag: String,
-    new_tag: String,
-    new_tag_color: String,
+    new_tag: Option<String>,
+    new_tag_color: Option<String>,
     state: tauri::State<AppState>,
     app: tauri::AppHandle,
 ) -> Result<bool, String> {
