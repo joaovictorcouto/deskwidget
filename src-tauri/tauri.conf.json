@@ -1,7 +1,8 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "deskwidget",
-  "version": "1.0.0",
+  "productName": "Desk Widget",
+  "version": "1.0.2",
+  "mainBinaryName": "DeskWidget",
   "identifier": "com.deskwidget.app",
   "build": {
     "frontendDist": "../dist",
@@ -44,7 +45,9 @@
       "nsis": {
         "installMode": "currentUser",
         "displayLanguageSelector": false,
-        "installerHooks": "installer-hooks.nsh"
+        "installerHooks": "installer-hooks.nsh",
+        "installerIcon": "icons/icon.ico",
+        "uninstallerIcon": "icons/icon.ico"
       }
     },
     "android": {

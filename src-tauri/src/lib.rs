@@ -17,10 +17,12 @@ pub fn run() {
                 let _ = app.emit("force-expand", ());
             }
         }))
-        .plugin(tauri_plugin_autostart::init(
-            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
-            Some(vec!["--minimized"]),
-        ))
+        .plugin(
+            tauri_plugin_autostart::Builder::new()
+                .app_name("Desk Widget")
+                .args(["--minimized"])
+                .build()
+        )
         .setup(|app| {
             let app_dir = app.path().app_data_dir().unwrap();
             std::fs::create_dir_all(&app_dir).unwrap();
