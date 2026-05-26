@@ -43,7 +43,7 @@ window.api = {
   expandWindow: () => invoke('expand_window', { availX: window.screen.availLeft || 0, availY: window.screen.availTop || 0, availWidth: window.screen.availWidth, availHeight: window.screen.availHeight }),
   collapseWindow: () => invoke('collapse_window', { availX: window.screen.availLeft || 0, availY: window.screen.availTop || 0, availWidth: window.screen.availWidth, availHeight: window.screen.availHeight }),
   previewEdge: (tempEdge) => invoke('preview_edge', { tempEdge, availX: window.screen.availLeft || 0, availY: window.screen.availTop || 0, availWidth: window.screen.availWidth, availHeight: window.screen.availHeight }),
-  writeUpdateChunk: (chunk, isStart) => invoke('write_update_chunk', { chunk, isStart }),
+  downloadUpdate: (url) => invoke('download_update', { url }),
   executeUpdate: () => invoke('execute_update'),
   
   // Event Listeners simulados (ainda precisam do backend emitindo)
@@ -57,6 +57,7 @@ window.api = {
   onForceExpand: (cb) => { const u = listen('force-expand', cb); return () => u.then(f => f()); },
   onPomodoroAction: (cb) => { const u = listen('pomodoro-action', (ev) => cb(ev.payload)); return () => u.then(f => f()); },
   onPositionerMetrics: (cb) => { const u = listen('positioner-metrics', (ev) => cb(ev.payload)); return () => u.then(f => f()); },
+  onUpdateDownloadProgress: (cb) => { const u = listen('update-download-progress', (ev) => cb(ev.payload)); return () => u.then(f => f()); },
 };
 
 ReactDOM.createRoot(document.getElementById('root')).render(

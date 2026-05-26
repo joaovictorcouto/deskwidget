@@ -135,7 +135,7 @@ pub fn run() {
             set_positioner_margins,
             save_popup_position,
             preview_appearance,
-            write_update_chunk,
+            download_update,
             execute_update,
         ]);
 
@@ -591,20 +591,56 @@ fn preview_appearance(settings: serde_json::Value, app: tauri::AppHandle) {
 }
 
 #[tauri::command]
-fn write_update_chunk(chunk: Vec<u8>, is_start: bool) -> Result<(), String> {
-    use std::fs::OpenOptions;
-    use std::io::Write;
-    let temp_path = std::env::temp_dir().join("DeskWidget_Setup.exe");
-    let mut file = OpenOptions::new()
-        .write(true)
-        .create(true)
-        .truncate(is_start)
-        .append(!is_start)
-        .open(temp_path)
-        .map_err(|e| e.to_string())?;
-        
-    file.write_all(&chunk).map_err(|e| e.to_string())?;
-    Ok(())
+async fn download_update(url: String, app: tauri::AppHandle) -> Result<(), String> {
+    use std::io::{Read, Write};
+
+    let app_clone = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let temp_path = std::env::temp_dir().join("DeskWidget_Setup.exe");
+
+        // Segue redirecionamentos automaticamente (ureq faz isso por padrão)
+        let response = ureq::get(&url)
+            .set("User-Agent", "DeskWidget-Updater/1.0")
+            .set("Accept", "application/octet-stream")
+            .call()
+            .map_err(|e| format!("Erro na requisição: {}", e))?;
+
+        let content_length: usize = response
+            .header("Content-Length")
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0);
+
+        let mut file = std::fs::File::create(&temp_path)
+            .map_err(|e| format!("Erro ao criar arquivo: {}", e))?;
+
+        let mut reader = response.into_reader();
+        let mut buf = [0u8; 65536]; // 64KB buffer
+        let mut downloaded: usize = 0;
+        let mut last_percent: u8 = 0;
+
+        loop {
+            let bytes_read = reader.read(&mut buf).map_err(|e| format!("Erro ao ler: {}", e))?;
+            if bytes_read == 0 {
+                break;
+            }
+            file.write_all(&buf[..bytes_read])
+                .map_err(|e| format!("Erro ao escrever: {}", e))?;
+            downloaded += bytes_read;
+
+            if content_length > 0 {
+                let percent = ((downloaded as f64 / content_length as f64) * 100.0) as u8;
+                if percent != last_percent {
+                    last_percent = percent;
+                    let _ = app_clone.emit("update-download-progress", percent);
+                }
+            }
+        }
+
+        let _ = app_clone.emit("update-download-progress", 100u8);
+        Ok(())
+    })
+    .await
+    .map_err(|e| format!("Erro na thread: {}", e))?
 }
 
 #[tauri::command]
@@ -617,3 +653,4 @@ fn execute_update(app: tauri::AppHandle) -> Result<(), String> {
     app.exit(0);
     Ok(())
 }
+

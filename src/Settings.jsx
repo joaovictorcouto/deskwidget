@@ -82,24 +82,20 @@ function Settings() {
     }
 
     try {
-      const response = await fetch(updateUrl);
-      if (!response.ok) throw new Error('Erro ao baixar');
-      const reader = response.body.getReader();
-      const contentLength = +response.headers.get('Content-Length') || 0;
-      let receivedLength = 0;
-      let isFirstChunk = true;
-      
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        receivedLength += value.length;
-        if (contentLength) {
-          setDownloadPercent(Math.round((receivedLength / contentLength) * 100));
-        }
-        await window.api.writeUpdateChunk(Array.from(value), isFirstChunk);
-        isFirstChunk = false;
+      // Ouvir progresso do download via evento do backend
+      let cleanupProgress = null;
+      if (window.api?.onUpdateDownloadProgress) {
+        cleanupProgress = window.api.onUpdateDownloadProgress((percent) => {
+          setDownloadPercent(percent);
+        });
       }
-      
+
+      // Download é feito inteiramente pelo backend Rust (sem CORS)
+      await window.api.downloadUpdate(updateUrl);
+
+      // Limpar listener de progresso
+      if (cleanupProgress) cleanupProgress();
+
       setUpdateStatus('readyToRestart');
       await window.api.executeUpdate();
     } catch (err) {
