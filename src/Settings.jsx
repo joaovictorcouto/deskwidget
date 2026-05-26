@@ -209,9 +209,6 @@ function Settings() {
                     onClick={() => updateLocalSetting('startOnWindows', localSettings.startOnWindows === 'true' ? 'false' : 'true')}
                   />
                 </div>
-                <p style={{fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '5px'}}>
-                  (Requer que o aplicativo esteja empacotado para funcionar corretamente)
-                </p>
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'center', marginTop: '20px' }}>

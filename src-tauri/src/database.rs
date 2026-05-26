@@ -3,6 +3,7 @@ use rusqlite::{params, Connection, Result};
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 use tauri::{Emitter, Manager};
+use tauri_plugin_autostart::ManagerExt;
 
 pub struct AppState {
     pub db: Mutex<Connection>,
@@ -412,6 +413,16 @@ pub fn update_setting(
             params![key, value],
         )
         .map_err(|e| e.to_string())?;
+
+    if key == "startOnWindows" {
+        let autostart_manager = app.autostart();
+        if value == "true" {
+            let _ = autostart_manager.enable();
+        } else {
+            let _ = autostart_manager.disable();
+        }
+    }
+
     let _ = app.emit("settings-updated", ());
     Ok(true)
 }
@@ -469,6 +480,9 @@ pub fn reset_settings(app: tauri::AppHandle, state: tauri::State<AppState>) -> R
         let _ = w.center();
     }
     
+    let autostart_manager = app.autostart();
+    let _ = autostart_manager.enable();
+
     let _ = app.emit("settings-updated", ());
     Ok(true)
 }
@@ -520,6 +534,11 @@ pub fn reset_settings_tab(tab: String, app: tauri::AppHandle, state: tauri::Stat
         ).map_err(|e| e.to_string())?;
     }
     
+    if tab == "geral" {
+        let autostart_manager = app.autostart();
+        let _ = autostart_manager.enable();
+    }
+
     let _ = app.emit("settings-updated", ());
     Ok(true)
 }

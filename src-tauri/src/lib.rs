@@ -1,6 +1,7 @@
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::{Emitter, Manager};
+use tauri_plugin_autostart::ManagerExt;
 
 mod database;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -33,6 +34,20 @@ pub fn run() {
             });
 
             let app_handle = app.handle().clone();
+
+            // Sincroniza o Auto-Start com o Windows na inicializacao
+            let autostart_manager = app.autostart();
+            let mut start_on_windows = true;
+            if let Ok(conn) = app.state::<database::AppState>().db.lock() {
+                if let Ok(val) = conn.query_row("SELECT value FROM settings WHERE key = 'startOnWindows'", [], |row| row.get::<_, String>(0)) {
+                    start_on_windows = val == "true";
+                }
+            }
+            if start_on_windows {
+                let _ = autostart_manager.enable();
+            } else {
+                let _ = autostart_manager.disable();
+            }
 
             // Setup Tray Menu
             let quit_i = MenuItem::with_id(app, "quit", "Sair", true, None::<&str>)?;
