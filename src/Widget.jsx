@@ -24,6 +24,7 @@ function Widget() {
   const isHoveredRef = React.useRef(false);
   const isSettingsOpenRef = React.useRef(false);
   const isHistoryOpenRef = React.useRef(false);
+  const isPopupOpenRef = React.useRef(false);
   const [edge, setEdge] = useState('right');
   const [yPos, setYPos] = useState(0);
 
@@ -48,7 +49,7 @@ function Widget() {
   const [confirmConfig, setConfirmConfig] = useState({ isOpen: false, message: '', onConfirm: null });
 
   // Estados de Atualização (Updater)
-  const CURRENT_VERSION = '1.2.0';
+  const CURRENT_VERSION = '1.2.1';
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [updateVersion, setUpdateVersion] = useState('');
   const [updateUrl, setUpdateUrl] = useState('');
@@ -376,6 +377,35 @@ function Widget() {
       });
     }
 
+    let removePopupOpenListener;
+    if (window.api?.onPopupOpened) {
+      removePopupOpenListener = window.api.onPopupOpened((id) => {
+        if (id === 'schedule-update') {
+          isPopupOpenRef.current = true;
+          setIsExpanded(true);
+          window.api?.expandWindow();
+        }
+      });
+    }
+
+    let removePopupCloseListener;
+    if (window.api?.onPopupClosed) {
+      removePopupCloseListener = window.api.onPopupClosed((id) => {
+        if (id === 'schedule-update') {
+          isPopupOpenRef.current = false;
+          if (!isHoveredRef.current && !isSettingsOpenRef.current && !isHistoryOpenRef.current) {
+            const delay = settings.delay ? parseInt(settings.delay) : 1000;
+            expandTimeout.current = setTimeout(() => {
+              if (!isHoveredRef.current && !isSettingsOpenRef.current && !isHistoryOpenRef.current) {
+                setIsExpanded(false);
+                window.api?.collapseWindow();
+              }
+            }, delay);
+          }
+        }
+      });
+    }
+
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
         setIsExpanded(false);
@@ -392,6 +422,8 @@ function Widget() {
       if (removeCloseListener) removeCloseListener();
       if (removeHistoryOpenListener) removeHistoryOpenListener();
       if (removeHistoryCloseListener) removeHistoryCloseListener();
+      if (removePopupOpenListener) removePopupOpenListener();
+      if (removePopupCloseListener) removePopupCloseListener();
       if (removeForceExpand) removeForceExpand();
       if (removePreviewListener) removePreviewListener();
       window.removeEventListener('keydown', handleKeyDown);
@@ -527,10 +559,10 @@ function Widget() {
 
   const handlePointerLeave = () => {
     isHoveredRef.current = false;
-    if (isDraggingRef.current || isSettingsOpenRef.current || isHistoryOpenRef.current) return;
+    if (isDraggingRef.current || isSettingsOpenRef.current || isHistoryOpenRef.current || isPopupOpenRef.current) return;
     const delay = settings.delay ? parseInt(settings.delay) : 1000;
     expandTimeout.current = setTimeout(() => {
-      if (isExpanded && !isSettingsOpenRef.current && !isHistoryOpenRef.current) {
+      if (isExpanded && !isSettingsOpenRef.current && !isHistoryOpenRef.current && !isPopupOpenRef.current) {
         setIsExpanded(false);
         window.api?.collapseWindow();
       }

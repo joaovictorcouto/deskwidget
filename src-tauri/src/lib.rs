@@ -435,6 +435,7 @@ async fn show_popup(config: serde_json::Value, app: tauri::AppHandle) -> Result<
                 }
 
                 set_window_margins(&window, margins.right, margins.bottom);
+                let _ = app_handle_clone.emit("popup-opened", id_clone.clone());
 
                 if id == "positioner" {
                     let w_clone = window.clone();
@@ -498,6 +499,7 @@ async fn show_popup(config: serde_json::Value, app: tauri::AppHandle) -> Result<
                                     set_window_margins(&w, margins.right, this_bottom);
                                 }
                             }
+                            let _ = app_handle_clone.emit("popup-closed", id_clone.clone());
                         }
                     });
                 }

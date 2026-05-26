@@ -58,6 +58,8 @@ window.api = {
   onPomodoroAction: (cb) => { const u = listen('pomodoro-action', (ev) => cb(ev.payload)); return () => u.then(f => f()); },
   onPositionerMetrics: (cb) => { const u = listen('positioner-metrics', (ev) => cb(ev.payload)); return () => u.then(f => f()); },
   onUpdateDownloadProgress: (cb) => { const u = listen('update-download-progress', (ev) => cb(ev.payload)); return () => u.then(f => f()); },
+  onPopupOpened: (cb) => { const u = listen('popup-opened', (ev) => cb(ev.payload)); return () => u.then(f => f()); },
+  onPopupClosed: (cb) => { const u = listen('popup-closed', (ev) => cb(ev.payload)); return () => u.then(f => f()); },
 };
 
 ReactDOM.createRoot(document.getElementById('root')).render(
