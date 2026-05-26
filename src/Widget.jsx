@@ -247,20 +247,22 @@ function Widget() {
       }
       
       // Extrair tags das tarefas carregadas caso haja novas
-      let hasNewTags = false;
-      const currentSavedTags = s.savedTags ? JSON.parse(s.savedTags) : [];
-      t.forEach(task => {
-        if (task.tag && task.tag.trim() !== '') {
-          const exists = currentSavedTags.some(tag => tag.name.toLowerCase() === task.tag.toLowerCase());
-          if (!exists) {
-            currentSavedTags.push({ name: task.tag, color: task.tagColor || getTagColor(task.tag) });
-            hasNewTags = true;
+      if (!isDeletingTagRef.current) {
+        let hasNewTags = false;
+        const currentSavedTags = s.savedTags ? JSON.parse(s.savedTags) : [];
+        t.forEach(task => {
+          if (task.tag && task.tag.trim() !== '') {
+            const exists = currentSavedTags.some(tag => tag.name.toLowerCase() === task.tag.toLowerCase());
+            if (!exists) {
+              currentSavedTags.push({ name: task.tag, color: task.tagColor || getTagColor(task.tag) });
+              hasNewTags = true;
+            }
           }
+        });
+        if (hasNewTags) {
+          window.api.updateSetting('savedTags', JSON.stringify(currentSavedTags));
+          setSavedTags(currentSavedTags);
         }
-      });
-      if (hasNewTags) {
-        window.api.updateSetting('savedTags', JSON.stringify(currentSavedTags));
-        setSavedTags(currentSavedTags);
       }
     }
   };
@@ -502,6 +504,7 @@ function Widget() {
   };
   
   const shownRemindersRef = React.useRef(new Set());
+  const isDeletingTagRef = React.useRef(false);
   
   const checkReminders = async () => {
       if (!window.api) return;
@@ -683,6 +686,7 @@ function Widget() {
       message: "Ao excluir esta etiqueta, todas as tarefas vinculadas ficarão sem etiqueta.",
       onConfirm: async () => {
         setConfirmConfig({ isOpen: false, message: '', onConfirm: null });
+        isDeletingTagRef.current = true;
         try {
           const newTags = savedTags.filter(t => t.name !== tagName);
           setSavedTags(newTags);
@@ -694,6 +698,8 @@ function Widget() {
           if (selectedTag === tagName) setSelectedTag('');
         } catch (err) {
           console.error("Erro ao excluir tag:", err);
+        } finally {
+          isDeletingTagRef.current = false;
         }
       },
       onCancel: () => setConfirmConfig({ isOpen: false, message: '', onConfirm: null })
