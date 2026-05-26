@@ -5,7 +5,7 @@ import { playNotificationSound } from './utils/audio.js';
 // ─── Shell padrão compartilhada por todos os popups ──────────────────────────
 // Modelo visual: popup de lembrete.
 // Altura fixa: 210px | Largura: 320px (definida no main.js)
-function PopupShell({ label, labelIcon, rightAction, progressBar, draggable, children }) {
+function PopupShell({ label, labelIcon, rightAction, progressBar, draggable, hideClose, children }) {
   // Se for a janela de arrasto (draggable), aplicamos a leve transparência
   const bgStyle = draggable ? {
     backgroundColor: 'rgba(25, 25, 25, 0.85)',
@@ -48,14 +48,14 @@ function PopupShell({ label, labelIcon, rightAction, progressBar, draggable, chi
           )}
           {label}
         </div>
-        {rightAction || (
+        {rightAction || (!hideClose && (
           <button
             onClick={() => window.api?.closeWindow()}
             style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '2px', lineHeight: 1, WebkitAppRegion: 'no-drag' }}
           >
             <X size={14} />
           </button>
-        )}
+        ))}
       </div>
 
       {/* Body */}
@@ -87,7 +87,7 @@ function ReminderPopup({ config }) {
   };
 
   return (
-    <PopupShell label="LEMBRETE" progressBar={config.progressBar}>
+    <PopupShell label="LEMBRETE" progressBar={config.progressBar} hideClose={!showOptions}>
       {showOptions ? (
         // Tela de adiar (substitui o body)
         <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -105,9 +105,16 @@ function ReminderPopup({ config }) {
       ) : (
         <>
           <h2 style={{ fontSize: '1rem', marginBottom: '5px', lineHeight: 1.3 }}>{reminder.title}</h2>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '5px', flex: 1 }}>
-            <Clock size={13} />
-            Agora · {new Date(reminder.datetime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.82rem', display: 'flex', flexDirection: 'column', gap: '3px', flex: 1 }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <Clock size={13} />
+              Agora · {new Date(reminder.datetime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </span>
+            {reminder.originalDatetime && (
+              <span style={{ fontSize: '0.72rem', opacity: 0.8, color: 'var(--primary)', fontWeight: 500 }}>
+                ⏰ Original: {new Date(reminder.originalDatetime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} (adiado)
+              </span>
+            )}
           </p>
           <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
             <button className="btn-primary" style={{ flex: 2, padding: '9px' }} onClick={handleComplete}>

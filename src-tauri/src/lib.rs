@@ -408,6 +408,7 @@ async fn show_popup(config: serde_json::Value, app: tauri::AppHandle) -> Result<
         .build()
         {
             Ok(window) => {
+                let _ = window.set_focus();
                 let id_clone = id.clone();
                 let app_handle_clone = app.clone();
                 let mut margins = get_positioner_margins(app.clone());

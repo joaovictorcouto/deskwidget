@@ -651,17 +651,6 @@ function Settings() {
                         <button className="btn-secondary" style={{ width: 'auto', padding: '6px 12px', fontSize: '0.75rem', marginTop: '8px', alignSelf: 'flex-start' }} onClick={checkUpdates}>
                           Verificar novamente
                         </button>
-                        <button 
-                          className="btn-secondary" 
-                          style={{ width: 'auto', padding: '6px 12px', fontSize: '0.75rem', marginTop: '8px', alignSelf: 'flex-start', borderColor: 'var(--primary)', color: 'var(--primary)' }} 
-                          onClick={() => {
-                            setUpdateVersion('1.3.0');
-                            setUpdateStatus('available');
-                            setUpdateUrl('https://raw.githubusercontent.com/joaovictorcouto/deskwidget/main/package.json');
-                          }}
-                        >
-                          🧪 Simular Update
-                        </button>
                       </div>
                     </div>
                   )}

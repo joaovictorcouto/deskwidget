@@ -32,6 +32,7 @@ pub struct Reminder {
     pub status: String,
     pub recurrence: Option<String>,
     pub createdAt: String,
+    pub originalDatetime: Option<String>,
 }
 
 pub fn get_dynamic_default_bottom(app: &tauri::AppHandle) -> i32 {
@@ -59,6 +60,7 @@ pub fn init_db(db_path: &str, app: &tauri::AppHandle) -> Result<Connection> {
     conn.execute(
         "CREATE TABLE IF NOT EXISTS reminders (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, datetime DATETIME NOT NULL, status TEXT DEFAULT 'agendado', recurrence TEXT, createdAt DATETIME DEFAULT CURRENT_TIMESTAMP)", [],
     )?;
+    let _ = conn.execute("ALTER TABLE reminders ADD COLUMN originalDatetime DATETIME", []);
     conn.execute(
         "CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)",
         [],
@@ -272,7 +274,7 @@ pub fn reorder_tasks(
 #[tauri::command]
 pub fn get_reminders(state: tauri::State<AppState>) -> Result<Vec<Reminder>, String> {
     let conn = state.db.lock().unwrap();
-    let mut stmt = conn.prepare("SELECT id, title, datetime, status, recurrence, createdAt FROM reminders ORDER BY datetime ASC").map_err(|e| e.to_string())?;
+    let mut stmt = conn.prepare("SELECT id, title, datetime, status, recurrence, createdAt, originalDatetime FROM reminders ORDER BY datetime ASC").map_err(|e| e.to_string())?;
     let rems = stmt
         .query_map([], |row| {
             Ok(Reminder {
@@ -282,6 +284,7 @@ pub fn get_reminders(state: tauri::State<AppState>) -> Result<Vec<Reminder>, Str
                 status: row.get(3)?,
                 recurrence: row.get(4)?,
                 createdAt: row.get(5)?,
+                originalDatetime: row.get(6)?,
             })
         })
         .map_err(|e| e.to_string())?
@@ -312,6 +315,7 @@ pub fn add_reminder(
         status: "agendado".into(),
         recurrence: Some(recurrence),
         createdAt: Local::now().to_rfc3339(),
+        originalDatetime: None,
     })
 }
 
@@ -326,7 +330,7 @@ pub fn update_reminder(
     let conn = state.db.lock().unwrap();
     if let Some(nd) = new_datetime {
         conn.execute(
-            "UPDATE reminders SET status = ?1, datetime = ?2 WHERE id = ?3",
+            "UPDATE reminders SET originalDatetime = COALESCE(originalDatetime, datetime), status = ?1, datetime = ?2 WHERE id = ?3",
             params![status, nd, id],
         )
         .map_err(|e| e.to_string())?;

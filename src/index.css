@@ -219,6 +219,16 @@ body {
   margin-bottom: 12px;
   font-size: 0.85rem;
 }
+.task-item .task-tag-trigger {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+.task-item:hover .task-tag-trigger,
+.task-item .task-tag-trigger.active {
+  opacity: 1;
+  pointer-events: auto;
+}
 .task-checkbox {
   appearance: none;
   width: 16px;

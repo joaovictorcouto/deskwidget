@@ -523,14 +523,18 @@ function Widget() {
                       changed = true;
                       continue;
                   }
+                  
+                  if (shownRemindersRef.current.has(rem.id)) {
+                      // Já está sendo exibido na tela, não expira nem faz nada
+                      continue;
+                  }
+                  
                   // Se passou do horário em até 5 minutos, exibe o popup
                   if ((now - remDate) < 5 * 60000) {
-                      if (!shownRemindersRef.current.has(rem.id)) {
-                          window.api.showPopup({ type: 'reminder', id: `rem-${rem.id}`, data: rem, height: 210 });
-                          shownRemindersRef.current.add(rem.id);
-                      }
+                      window.api.showPopup({ type: 'reminder', id: `rem-${rem.id}`, data: rem, height: 210 });
+                      shownRemindersRef.current.add(rem.id);
                   } else {
-                      // Passou de 5 minutos, marca como perdido
+                      // Passou de 5 minutos e não foi exibido, marca como perdido
                       await window.api.updateReminder(rem.id, 'perdido');
                       changed = true;
                   }
@@ -621,7 +625,8 @@ function Widget() {
   const getTagColor = (tag) => {
     let hash = 0;
     for (let i = 0; i < tag.length; i++) hash = tag.charCodeAt(i) + ((hash << 5) - hash);
-    return `hsl(${Math.abs(hash) % 360}, 75%, 60%)`;
+    const hue = Math.abs(hash * 137.508) % 360;
+    return `hsl(${hue}, 80%, 45%)`;
   };
 
   const addTagToSaved = (tagName) => {
@@ -677,15 +682,19 @@ function Widget() {
       isOpen: true,
       message: "Ao excluir esta etiqueta, todas as tarefas vinculadas ficarão sem etiqueta.",
       onConfirm: async () => {
-        const newTags = savedTags.filter(t => t.name !== tagName);
-        setSavedTags(newTags);
-        if (window.api) {
-          window.api.updateSetting('savedTags', JSON.stringify(newTags));
-          await window.api.updateTaskTag(tagName, null, null);
-          loadData();
-        }
-        if (selectedTag === tagName) setSelectedTag('');
         setConfirmConfig({ isOpen: false, message: '', onConfirm: null });
+        try {
+          const newTags = savedTags.filter(t => t.name !== tagName);
+          setSavedTags(newTags);
+          if (window.api) {
+            await window.api.updateSetting('savedTags', JSON.stringify(newTags));
+            await window.api.updateTaskTag(tagName, null, null);
+            await loadData();
+          }
+          if (selectedTag === tagName) setSelectedTag('');
+        } catch (err) {
+          console.error("Erro ao excluir tag:", err);
+        }
       },
       onCancel: () => setConfirmConfig({ isOpen: false, message: '', onConfirm: null })
     });
@@ -1090,6 +1099,7 @@ function Widget() {
                           )}
                           {settings.enableTags === 'true' && (
                             <span 
+                              className={`task-tag-trigger ${editingTaskTagId === task.id ? 'active' : ''}`}
                               style={{ cursor: 'pointer', color: task.tag ? task.tagColor : 'var(--text-muted)', marginLeft: '4px', display: 'flex', alignItems: 'center', position: 'relative' }} 
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -1407,7 +1417,7 @@ function Widget() {
             <div className="scrollable-content" style={{ paddingBottom: '10px' }}>
               <textarea 
                 className="form-control"
-                style={{ height: '100%', resize: 'none', backgroundColor: 'var(--bg-main)' }}
+                style={{ height: '100%', resize: 'none', backgroundColor: 'var(--bg-main)', overflow: quickNote ? 'auto' : 'hidden' }}
                 placeholder="Escreva algo aqui... salvo automaticamente."
                 value={quickNote}
                 onChange={(e) => setQuickNote(e.target.value)}
