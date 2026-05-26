@@ -111,6 +111,7 @@ pub fn run() {
             database::update_task_title,
             database::delete_task,
             database::update_task_tag,
+            database::update_single_task_tag,
             database::reorder_tasks,
             database::get_reminders,
             database::add_reminder,

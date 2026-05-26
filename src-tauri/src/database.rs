@@ -542,3 +542,21 @@ pub fn reset_settings_tab(tab: String, app: tauri::AppHandle, state: tauri::Stat
     let _ = app.emit("settings-updated", ());
     Ok(true)
 }
+
+#[tauri::command]
+pub fn update_single_task_tag(
+    task_id: i64,
+    tag: Option<String>,
+    tag_color: Option<String>,
+    state: tauri::State<AppState>,
+    app: tauri::AppHandle,
+) -> Result<bool, String> {
+    let conn = state.db.lock().unwrap();
+    conn.execute(
+        "UPDATE tasks SET tag = ?1, tagColor = ?2 WHERE id = ?3",
+        params![tag, tag_color, task_id],
+    )
+    .map_err(|e| e.to_string())?;
+    let _ = app.emit("data-updated", ());
+    Ok(true)
+}

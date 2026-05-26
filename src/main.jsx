@@ -17,6 +17,7 @@ window.api = {
   updateTaskTitle: (id, title) => invoke('update_task_title', { id, title }),
   deleteTask: (id) => invoke('delete_task', { id }),
   updateTaskTag: (oldTag, newTag, newTagColor) => invoke('update_task_tag', { oldTag, newTag, newTagColor }),
+  updateSingleTaskTag: (taskId, tag, tagColor) => invoke('update_single_task_tag', { taskId, tag, tagColor }),
   reorderTasks: (ids) => invoke('reorder_tasks', { ids }),
   getReminders: () => invoke('get_reminders'),
   addReminder: (title, datetime, recurrence) => invoke('add_reminder', { title, datetime, recurrence }),
