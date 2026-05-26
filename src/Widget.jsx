@@ -19,6 +19,7 @@ function Widget() {
   const [newReminderTitle, setNewReminderTitle] = useState('');
   const [newReminderDate, setNewReminderDate] = useState('');
   const [newReminderTime, setNewReminderTime] = useState('');
+  const [reminderError, setReminderError] = useState('');
   const isHoveredRef = React.useRef(false);
   const isSettingsOpenRef = React.useRef(false);
   const isHistoryOpenRef = React.useRef(false);
@@ -491,16 +492,25 @@ function Widget() {
   };
 
   const handleAddReminder = async () => {
-    if (!newReminderTitle || !newReminderDate || !newReminderTime) return;
+    setReminderError('');
+    if (!newReminderTitle) {
+      setReminderError('Por favor, informe o título do lembrete.');
+      return;
+    }
+    if (!newReminderDate || !newReminderTime) {
+      setReminderError('Por favor, defina a data e a hora.');
+      return;
+    }
     const dt = new Date(`${newReminderDate}T${newReminderTime}`);
     if (dt < new Date()) {
-      alert("Não é possível agendar um lembrete no passado.");
+      setReminderError('Não é possível agendar um lembrete no passado.');
       return;
     }
     if (window.api) {
       await window.api.addReminder(newReminderTitle, dt.toISOString(), newReminderRecurrence);
       setNewReminderTitle('');
       setNewReminderRecurrence('none');
+      setReminderError('');
       
       const now = new Date();
       const year = now.getFullYear();
@@ -948,7 +958,7 @@ function Widget() {
                 className="form-control" 
                 placeholder="ex: Ligar para Cliente" 
                 value={newReminderTitle}
-                onChange={e => setNewReminderTitle(e.target.value)}
+                onChange={e => { setNewReminderTitle(e.target.value); setReminderError(''); }}
               />
             </div>
             <div className="row form-group">
@@ -958,7 +968,7 @@ function Widget() {
                   type="date" 
                   className="form-control"
                   value={newReminderDate}
-                  onChange={e => setNewReminderDate(e.target.value)} 
+                  onChange={e => { setNewReminderDate(e.target.value); setReminderError(''); }} 
                 />
               </div>
               <div style={{flex: 1}}>
@@ -968,7 +978,7 @@ function Widget() {
                     type="time" 
                     className="form-control" 
                     value={newReminderTime} 
-                    onChange={e => setNewReminderTime(e.target.value)} 
+                    onChange={e => { setNewReminderTime(e.target.value); setReminderError(''); }} 
                     style={{ flex: 1 }}
                   />
                 </div>
@@ -980,7 +990,7 @@ function Widget() {
               <select 
                 className="form-control"
                 value={newReminderRecurrence}
-                onChange={e => setNewReminderRecurrence(e.target.value)}
+                onChange={e => { setNewReminderRecurrence(e.target.value); setReminderError(''); }}
               >
                 <option value="none">Não repetir (Único)</option>
                 <option value="daily">Diariamente</option>
@@ -993,6 +1003,12 @@ function Widget() {
             {reminders.some(r => (r.status === 'agendado' || r.status === 'pausado') && r.datetime.startsWith(newReminderDate) && r.datetime.includes('T' + newReminderTime)) && (
               <div style={{ color: 'var(--danger)', fontSize: '0.7rem', marginBottom: '10px', marginTop: '-5px' }}>
                 ⚠️ Já existe um lembrete nesse horário.
+              </div>
+            )}
+
+            {reminderError && (
+              <div style={{ color: 'var(--danger)', fontSize: '0.7rem', marginBottom: '10px', marginTop: '-5px' }}>
+                ⚠️ {reminderError}
               </div>
             )}
             
