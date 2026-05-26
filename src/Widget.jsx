@@ -6,7 +6,7 @@
  * - Puxador: A pequena barra que o usuário clica e arrasta para mover a posição vertical.
  */
 import React, { useState, useEffect, useRef } from 'react';
-import { Settings, Plus, CheckCircle, Bell, ChevronDown, ChevronRight, GripVertical, Clock, Tag, X } from 'lucide-react';
+import { Settings, Plus, CheckCircle, Bell, ChevronDown, ChevronRight, GripVertical, Clock, Tag, X, Sun, Moon } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 
 function Widget() {
@@ -88,12 +88,14 @@ function Widget() {
         window.api.updateSetting('savedTags', JSON.stringify(currentSavedTags));
         setSavedTags(currentSavedTags);
       }
-      
-      if (s.theme === 'claro') {
-        document.body.classList.add('theme-light');
-      } else {
-        document.body.classList.remove('theme-light');
-      }
+    }
+  };
+
+  const toggleTheme = async () => {
+    const newTheme = settings.theme === 'claro' ? 'escuro' : 'claro';
+    setSettings(prev => ({ ...prev, theme: newTheme }));
+    if (window.api) {
+      await window.api.updateSetting('theme', newTheme);
     }
   };
 
@@ -194,7 +196,12 @@ function Widget() {
       });
     }
 
-
+    let removePreviewListener;
+    if (window.api?.onPreviewAppearance) {
+      removePreviewListener = window.api.onPreviewAppearance((preview) => {
+        setSettings(prev => ({ ...prev, ...preview }));
+      });
+    }
 
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
@@ -213,6 +220,7 @@ function Widget() {
       if (removeHistoryOpenListener) removeHistoryOpenListener();
       if (removeHistoryCloseListener) removeHistoryCloseListener();
       if (removeForceExpand) removeForceExpand();
+      if (removePreviewListener) removePreviewListener();
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, [isExpanded, settings.delay]);
@@ -628,9 +636,24 @@ function Widget() {
           }} 
         />
         <div className="header" style={{ padding: '10px 15px', display: 'flex', alignItems: 'center' }}>
-          <img src="./logo-desk.png" alt="DeskWidget" style={{ height: '24px', objectFit: 'contain' }} onError={(e) => { e.target.style.display = 'none'; document.getElementById('fallback-logo-text').style.display = 'block'; }} />
+          <img 
+            src={settings.theme === 'claro' ? './logo-desk-dark.png' : './logo-desk-light.png'} 
+            alt="DeskWidget" 
+            style={{ height: '24px', objectFit: 'contain' }} 
+            onError={(e) => { 
+              if (e.target.src.includes('logo-desk-dark.png') || e.target.src.includes('logo-desk-light.png')) {
+                e.target.src = './logo-desk.png';
+              } else {
+                e.target.style.display = 'none'; 
+                document.getElementById('fallback-logo-text').style.display = 'block'; 
+              }
+            }} 
+          />
           <h1 id="fallback-logo-text" style={{ display: 'none', margin: 0, fontSize: '1rem', fontWeight: 600 }}>DeskWidget</h1>
-          <button className="icon-btn" onClick={openSettings} style={{ marginLeft: 'auto' }}>
+          <button className="icon-btn" onClick={toggleTheme} style={{ marginLeft: 'auto', marginRight: '8px' }}>
+            {settings.theme === 'claro' ? <Moon size={18} /> : <Sun size={18} />}
+          </button>
+          <button className="icon-btn" onClick={openSettings}>
             <Settings size={18} />
           </button>
         </div>

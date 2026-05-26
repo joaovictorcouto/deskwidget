@@ -32,8 +32,11 @@ function Settings() {
   };
 
   const close = () => {
-    if (window.api && localSettings.edge !== settings.edge) {
-      window.api.previewEdge(settings.edge);
+    if (window.api) {
+      if (localSettings.edge !== settings.edge) {
+        window.api.previewEdge(settings.edge);
+      }
+      window.api.previewAppearance(settings);
     }
     window.api?.closeWindow();
   };
@@ -91,24 +94,24 @@ function Settings() {
       <div className="window-content" style={{ padding: '0', display: 'flex', flexDirection: 'column', height: '100%' }}>
         
         {/* TAB HEADER */}
-        <div style={{ display: 'flex', justifyContent: 'center', gap: '10px', borderBottom: '1px solid var(--border)', backgroundColor: 'rgba(0,0,0,0.2)' }}>
+        <div className="tabs">
           <button 
-            style={{ padding: '10px 15px', border: 'none', background: 'transparent', color: activeTab === 'geral' ? 'var(--primary)' : 'var(--text-muted)', borderBottom: activeTab === 'geral' ? '2px solid var(--primary)' : '2px solid transparent', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '6px' }}
+            className={`tab ${activeTab === 'geral' ? 'active' : ''}`}
             onClick={() => setActiveTab('geral')}
           ><SettingsIcon size={14} /> Geral</button>
           
           <button 
-            style={{ padding: '10px 15px', border: 'none', background: 'transparent', color: activeTab === 'aparencia' ? 'var(--primary)' : 'var(--text-muted)', borderBottom: activeTab === 'aparencia' ? '2px solid var(--primary)' : '2px solid transparent', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '6px' }}
+            className={`tab ${activeTab === 'aparencia' ? 'active' : ''}`}
             onClick={() => setActiveTab('aparencia')}
           ><Palette size={14} /> Aparência</button>
 
           <button 
-            style={{ padding: '10px 15px', border: 'none', background: 'transparent', color: activeTab === 'audio' ? 'var(--primary)' : 'var(--text-muted)', borderBottom: activeTab === 'audio' ? '2px solid var(--primary)' : '2px solid transparent', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '6px' }}
+            className={`tab ${activeTab === 'audio' ? 'active' : ''}`}
             onClick={() => setActiveTab('audio')}
           ><Volume2 size={14} /> Áudio</button>
 
           <button 
-            style={{ padding: '10px 15px', border: 'none', background: 'transparent', color: activeTab === 'posicao' ? 'var(--primary)' : 'var(--text-muted)', borderBottom: activeTab === 'posicao' ? '2px solid var(--primary)' : '2px solid transparent', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '6px' }}
+            className={`tab ${activeTab === 'posicao' ? 'active' : ''}`}
             onClick={() => setActiveTab('posicao')}
           ><Move size={14} /> Posicionamento</button>
         </div>
@@ -228,11 +231,19 @@ function Settings() {
                 <div className="segmented-control">
                   <button 
                     className={`segmented-btn ${localSettings.theme === 'claro' ? 'active' : ''}`}
-                    onClick={() => updateLocalSetting('theme', 'claro')}
+                    onClick={() => {
+                      const updated = { ...localSettings, theme: 'claro' };
+                      setLocalSettings(updated);
+                      window.api?.previewAppearance(updated);
+                    }}
                   >Claro</button>
                   <button 
                     className={`segmented-btn ${localSettings.theme !== 'claro' ? 'active' : ''}`}
-                    onClick={() => updateLocalSetting('theme', 'escuro')}
+                    onClick={() => {
+                      const updated = { ...localSettings, theme: 'escuro' };
+                      setLocalSettings(updated);
+                      window.api?.previewAppearance(updated);
+                    }}
                   >Escuro</button>
                 </div>
               </div>
@@ -245,7 +256,11 @@ function Settings() {
                     return (
                       <div 
                         key={color}
-                        onClick={() => updateLocalSetting('themeColor', color)}
+                        onClick={() => {
+                          const updated = { ...localSettings, themeColor: color };
+                          setLocalSettings(updated);
+                          window.api?.previewAppearance(updated);
+                        }}
                         style={{
                           width: '26px',
                           height: '26px',
@@ -272,7 +287,11 @@ function Settings() {
                   type="range" 
                   min="10" max="100" 
                   value={localSettings.opacity || 90}
-                  onChange={(e) => setLocalSettings({...localSettings, opacity: e.target.value})}
+                  onChange={(e) => {
+                    const updated = { ...localSettings, opacity: e.target.value };
+                    setLocalSettings(updated);
+                    window.api?.previewAppearance(updated);
+                  }}
                   style={{ width: '100%' }}
                 />
               </div>
@@ -286,7 +305,11 @@ function Settings() {
                   type="range" 
                   min="10" max="100" 
                   value={localSettings.expandedOpacity || 100}
-                  onChange={(e) => setLocalSettings({...localSettings, expandedOpacity: e.target.value})}
+                  onChange={(e) => {
+                    const updated = { ...localSettings, expandedOpacity: e.target.value };
+                    setLocalSettings(updated);
+                    window.api?.previewAppearance(updated);
+                  }}
                   style={{ width: '100%' }}
                 />
               </div>
@@ -343,7 +366,7 @@ function Settings() {
                   </button>
                 </div>
                 
-                <div className="setting-item" style={{ flexDirection: 'column', alignItems: 'flex-start', backgroundColor: 'rgba(0,0,0,0.1)', padding: '15px', borderRadius: '8px', marginTop: '10px' }}>
+                <div className="setting-item" style={{ flexDirection: 'column', alignItems: 'flex-start', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)', padding: '15px', borderRadius: '8px', marginTop: '10px' }}>
                   <span style={{ marginBottom: '10px', fontSize: '0.85rem', fontWeight: 'bold' }}>Testar Popups (Padronizados)</span>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', width: '100%', marginBottom: '15px', paddingBottom: '15px', borderBottom: '1px solid var(--border)' }}>
                     <button className="btn-secondary" onClick={() => window.api?.showPopup({ type: 'reminder', id: `test-rem-${Date.now()}`, autoClose: 5000, data: { id: 'test', title: 'Lembrete de Teste', datetime: new Date().toISOString() } })}>Lembrete</button>

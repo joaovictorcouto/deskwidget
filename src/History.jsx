@@ -109,19 +109,19 @@ function History() {
         <button className="close-btn" onClick={close}><X size={18} /></button>
       </div>
 
-      <div className="tabs" style={{ padding: '0 20px', marginBottom: '0' }}>
-        <div 
+      <div className="tabs" style={{ marginBottom: '0' }}>
+        <button 
           className={`tab ${activeTab === 'agendados' ? 'active' : ''}`}
           onClick={() => setActiveTab('agendados')}
         >
           <Calendar size={16} /> Agendados
-        </div>
-        <div 
+        </button>
+        <button 
           className={`tab ${activeTab === 'historico' ? 'active' : ''}`}
           onClick={() => setActiveTab('historico')}
         >
           <HistoryIcon size={16} /> Histórico
-        </div>
+        </button>
       </div>
 
       <div className="window-content">

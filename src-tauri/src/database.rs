@@ -2,7 +2,7 @@ use chrono::Local;
 use rusqlite::{params, Connection, Result};
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 
 pub struct AppState {
     pub db: Mutex<Connection>,
@@ -33,7 +33,24 @@ pub struct Reminder {
     pub createdAt: String,
 }
 
-pub fn init_db(db_path: &str) -> Result<Connection> {
+pub fn get_dynamic_default_bottom(app: &tauri::AppHandle) -> i32 {
+    if let Ok(Some(monitor)) = app.primary_monitor() {
+        let scale_factor = monitor.scale_factor();
+        let size = monitor.size();
+        let work_area = monitor.work_area();
+        
+        let screen_height = size.height as f64 / scale_factor;
+        let work_height = work_area.size.height as f64 / scale_factor;
+        let work_y = work_area.position.y as f64 / scale_factor;
+        
+        let occupied_bottom = screen_height - (work_height + work_y);
+        let margin = (occupied_bottom.max(0.0) + 15.0) as i32;
+        return margin;
+    }
+    85 // fallback
+}
+
+pub fn init_db(db_path: &str, app: &tauri::AppHandle) -> Result<Connection> {
     let conn = Connection::open(db_path)?;
     conn.execute(
         "CREATE TABLE IF NOT EXISTS tasks (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, completed BOOLEAN DEFAULT 0, position INTEGER DEFAULT 0, completedAt DATETIME, createdAt DATETIME DEFAULT CURRENT_TIMESTAMP, tag TEXT, tagColor TEXT)", [],
@@ -45,26 +62,31 @@ pub fn init_db(db_path: &str) -> Result<Connection> {
         "CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)",
         [],
     )?;
+    
+    let default_bottom = get_dynamic_default_bottom(app);
     let default_settings = vec![
-        ("opacity", "90"),
-        ("position", "direita"),
-        ("theme", "escuro"),
-        ("delay", "1000"),
-        ("startOnWindows", "false"),
-        ("enablePomodoro", "false"),
-        ("enableNotes", "false"),
-        ("enableTasks", "true"),
-        ("enableReminders", "true"),
-        ("enableProgressBar", "true"),
-        ("enableTags", "true"),
-        ("pomodoroFocus", "25"),
-        ("pomodoroBreak", "5"),
-        ("pomodoroSound", "sino"),
-        ("popupMarginRight", "12"),
-        ("popupMarginBottom", "85"),
-        ("popupGap", "10"),
-        ("edge", "right"),
-        ("yPosition", "115"),
+        ("opacity", "90".to_string()),
+        ("theme", "escuro".to_string()),
+        ("themeColor", "#5c85ff".to_string()),
+        ("delay", "1000".to_string()),
+        ("startOnWindows", "true".to_string()),
+        ("enablePomodoro", "false".to_string()),
+        ("enableNotes", "false".to_string()),
+        ("enableTasks", "true".to_string()),
+        ("enableReminders", "true".to_string()),
+        ("enableProgressBar", "true".to_string()),
+        ("enableTags", "true".to_string()),
+        ("pomodoroFocus", "25".to_string()),
+        ("pomodoroBreak", "5".to_string()),
+        ("pomodoroSound", "suave".to_string()),
+        ("soundEnabled", "true".to_string()),
+        ("soundVolume", "40".to_string()),
+        ("soundType", "suave".to_string()),
+        ("popupMarginRight", "15".to_string()),
+        ("popupMarginBottom", default_bottom.to_string()),
+        ("popupGap", "10".to_string()),
+        ("edge", "right".to_string()),
+        ("yPosition", "115".to_string()),
     ];
     for (k, v) in default_settings {
         let exists: Result<String, _> =
@@ -390,6 +412,114 @@ pub fn update_setting(
             params![key, value],
         )
         .map_err(|e| e.to_string())?;
+    let _ = app.emit("settings-updated", ());
+    Ok(true)
+}
+
+#[tauri::command]
+pub fn reset_settings(app: tauri::AppHandle, state: tauri::State<AppState>) -> Result<bool, String> {
+    let conn = state.db.lock().unwrap();
+    conn.execute("DELETE FROM settings", []).map_err(|e| e.to_string())?;
+    
+    let default_bottom = get_dynamic_default_bottom(&app);
+    let default_settings = vec![
+        ("opacity", "90".to_string()),
+        ("theme", "escuro".to_string()),
+        ("themeColor", "#5c85ff".to_string()),
+        ("delay", "1000".to_string()),
+        ("startOnWindows", "true".to_string()),
+        ("enablePomodoro", "false".to_string()),
+        ("enableNotes", "false".to_string()),
+        ("enableTasks", "true".to_string()),
+        ("enableReminders", "true".to_string()),
+        ("enableProgressBar", "true".to_string()),
+        ("enableTags", "true".to_string()),
+        ("pomodoroFocus", "25".to_string()),
+        ("pomodoroBreak", "5".to_string()),
+        ("pomodoroSound", "suave".to_string()),
+        ("soundEnabled", "true".to_string()),
+        ("soundVolume", "40".to_string()),
+        ("soundType", "suave".to_string()),
+        ("popupMarginRight", "15".to_string()),
+        ("popupMarginBottom", default_bottom.to_string()),
+        ("popupGap", "10".to_string()),
+        ("edge", "right".to_string()),
+        ("yPosition", "115".to_string()),
+    ];
+    
+    for (k, v) in default_settings {
+        conn.execute(
+            "INSERT OR REPLACE INTO settings (key, value) VALUES (?1, ?2)",
+            params![k, v],
+        ).map_err(|e| e.to_string())?;
+    }
+    
+    let app_dir = app.path().app_data_dir().unwrap();
+    let state_path = app_dir.join("window-state.json");
+    if state_path.exists() {
+        let _ = std::fs::remove_file(state_path);
+    }
+    
+    if let Some(w) = app.get_webview_window("settings") {
+        let _ = w.set_size(tauri::Size::Logical(tauri::LogicalSize { width: 560.0, height: 703.0 }));
+        let _ = w.center();
+    }
+    if let Some(w) = app.get_webview_window("history") {
+        let _ = w.set_size(tauri::Size::Logical(tauri::LogicalSize { width: 500.0, height: 600.0 }));
+        let _ = w.center();
+    }
+    
+    let _ = app.emit("settings-updated", ());
+    Ok(true)
+}
+
+#[tauri::command]
+pub fn reset_settings_tab(tab: String, app: tauri::AppHandle, state: tauri::State<AppState>) -> Result<bool, String> {
+    let conn = state.db.lock().unwrap();
+    let default_bottom = get_dynamic_default_bottom(&app);
+    let bottom_str = default_bottom.to_string();
+    
+    let keys_to_reset = match tab.as_str() {
+        "geral" => vec![
+            ("enableProgressBar", "true"),
+            ("enablePomodoro", "false"),
+            ("pomodoroFocus", "25"),
+            ("pomodoroBreak", "5"),
+            ("enableTasks", "true"),
+            ("enableReminders", "true"),
+            ("enableNotes", "false"),
+            ("enableTags", "true"),
+            ("startOnWindows", "true"),
+        ],
+        "aparencia" => vec![
+            ("theme", "escuro"),
+            ("themeColor", "#5c85ff"),
+            ("opacity", "90"),
+            ("expandedOpacity", "100"),
+        ],
+        "audio" => vec![
+            ("soundEnabled", "true"),
+            ("soundVolume", "40"),
+            ("soundType", "suave"),
+            ("pomodoroSound", "suave"),
+        ],
+        "posicao" => vec![
+            ("edge", "right"),
+            ("delay", "1000"),
+            ("popupMarginRight", "15"),
+            ("popupMarginBottom", bottom_str.as_str()),
+            ("popupGap", "10"),
+        ],
+        _ => return Err("Aba desconhecida".to_string()),
+    };
+    
+    for (k, v) in keys_to_reset {
+        conn.execute(
+            "INSERT OR REPLACE INTO settings (key, value) VALUES (?1, ?2)",
+            params![k, v],
+        ).map_err(|e| e.to_string())?;
+    }
+    
     let _ = app.emit("settings-updated", ());
     Ok(true)
 }

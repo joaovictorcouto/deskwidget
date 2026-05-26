@@ -26,7 +26,7 @@ pub fn run() {
             let db_path = app_dir.join("deskwidget.db");
 
             let conn =
-                database::init_db(db_path.to_str().unwrap()).expect("Falha ao inicializar o banco");
+                database::init_db(db_path.to_str().unwrap(), app.handle()).expect("Falha ao inicializar o banco");
             app.manage(database::AppState {
                 db: std::sync::Mutex::new(conn),
                 active_popups: std::sync::Mutex::new(Vec::new()),
@@ -102,6 +102,8 @@ pub fn run() {
             database::delete_reminder,
             database::get_settings,
             database::update_setting,
+            database::reset_settings,
+            database::reset_settings_tab,
             expand_window,
             collapse_window,
             update_position,
@@ -114,6 +116,7 @@ pub fn run() {
             get_positioner_margins,
             set_positioner_margins,
             save_popup_position,
+            preview_appearance,
         ]);
 
     builder
@@ -299,8 +302,8 @@ async fn open_settings(app: tauri::AppHandle) -> Result<(), String> {
         tauri::WebviewUrl::App("index.html#/settings".into()),
     )
     .title("Configurações")
-    .inner_size(560.0, 680.0)
-    .min_inner_size(560.0, 680.0)
+    .inner_size(560.0, 703.0)
+    .min_inner_size(560.0, 703.0)
     .transparent(true)
     .decorations(false)
     .shadow(false)
@@ -559,4 +562,9 @@ fn save_popup_position(right: i32, bottom: i32, app: tauri::AppHandle) {
 #[tauri::command]
 fn pomodoro_action(action: String, app: tauri::AppHandle) {
     let _ = app.emit("pomodoro-action", action);
+}
+
+#[tauri::command]
+fn preview_appearance(settings: serde_json::Value, app: tauri::AppHandle) {
+    let _ = app.emit("preview-appearance", settings);
 }

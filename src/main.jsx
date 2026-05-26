@@ -25,6 +25,9 @@ window.api = {
   deleteReminder: (id) => invoke('delete_reminder', { id }),
   getSettings: () => invoke('get_settings'),
   updateSetting: (key, value) => invoke('update_setting', { key, value }),
+  resetSettings: () => invoke('reset_settings'),
+  resetSettingsTab: (tab) => invoke('reset_settings_tab', { tab }),
+  previewAppearance: (settings) => invoke('preview_appearance', { settings }),
   
   openSettings: () => invoke('open_settings'),
   openHistory: () => invoke('open_history'),
@@ -42,6 +45,7 @@ window.api = {
   
   // Event Listeners simulados (ainda precisam do backend emitindo)
   onSettingsUpdated: (cb) => { const u = listen('settings-updated', cb); return () => u.then(f => f()); },
+  onPreviewAppearance: (cb) => { const u = listen('preview-appearance', (ev) => cb(ev.payload)); return () => u.then(f => f()); },
   onDataUpdated: (cb) => { const u = listen('data-updated', cb); return () => u.then(f => f()); },
   onSettingsOpened: (cb) => { const u = listen('settings-opened', cb); return () => u.then(f => f()); },
   onSettingsClosed: (cb) => { const u = listen('settings-closed', cb); return () => u.then(f => f()); },
