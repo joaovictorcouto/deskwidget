@@ -1,1 +1,0 @@
-fn main() { let x: tauri::monitor::Monitor; }

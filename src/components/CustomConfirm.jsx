@@ -83,13 +83,6 @@ export default function CustomConfirm({ isOpen, message, onConfirm, onCancel }) 
           </button>
         </div>
       </div>
-
-      <style>{`
-        @keyframes confirmFadeIn {
-          from { opacity: 0; transform: scale(0.95); }
-          to { opacity: 1; transform: scale(1); }
-        }
-      `}</style>
     </div>
   );
 }
