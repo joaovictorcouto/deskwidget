@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { CheckCircle, Clock, Coffee, X, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Move } from 'lucide-react';
+import { CheckCircle, Clock, Coffee, X, ChevronUp, ChevronDown, Move } from 'lucide-react';
 import { playNotificationSound } from './utils/audio.js';
 
 // ─── Shell padrão compartilhada por todos os popups ──────────────────────────

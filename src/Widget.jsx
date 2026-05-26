@@ -6,7 +6,7 @@
  * - Puxador: A pequena barra que o usuário clica e arrasta para mover a posição vertical.
  */
 import React, { useState, useEffect, useRef } from 'react';
-import { Settings, Plus, CheckCircle, Bell, ChevronDown, ChevronRight, GripVertical, Clock, Tag, X, Sun, Moon, ArrowUp, Download } from 'lucide-react';
+import { Settings, CheckCircle, Bell, ChevronDown, ChevronRight, GripVertical, Clock, Tag, X, Sun, Moon, ArrowUp } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import CustomConfirm from './components/CustomConfirm';
 
