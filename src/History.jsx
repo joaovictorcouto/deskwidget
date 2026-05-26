@@ -4,6 +4,7 @@ import { X, Calendar, History as HistoryIcon, BellRing, PauseCircle, CheckCircle
 function History() {
   const [activeTab, setActiveTab] = useState('agendados'); // 'agendados' or 'historico'
   const [reminders, setReminders] = useState([]);
+  const [historyError, setHistoryError] = useState('');
   
   const [editingId, setEditingId] = React.useState(null);
   const [cloningId, setCloningId] = React.useState(null);
@@ -61,8 +62,13 @@ function History() {
   const saveEdit = async () => {
     if (!window.api) return;
     const dt = new Date(`${editDate}T${editTime}`);
+    if (dt < new Date()) {
+      setHistoryError('Não é possível agendar um lembrete no passado.');
+      return;
+    }
     await window.api.updateReminderFull(editingId, editTitle, dt.toISOString());
     setEditingId(null);
+    setHistoryError('');
     loadData();
   };
 
@@ -77,13 +83,16 @@ function History() {
   const saveClone = async () => {
     if (!window.api) return;
     const dt = new Date(`${editDate}T${editTime}`);
-    const original = reminders.find(r => r.id === cloningId);
-    if (original && original.status === 'perdido') {
-      await window.api.reagendarPerdido(cloningId, editTitle, dt.toISOString());
-    } else {
-      await window.api.addReminder(editTitle, dt.toISOString());
+    if (dt < new Date()) {
+      setHistoryError('Não é possível agendar um lembrete no passado.');
+      return;
     }
+    const original = reminders.find(r => r.id === cloningId);
+    const recurrence = original ? (original.recurrence || 'none') : 'none';
+    
+    await window.api.addReminder(editTitle, dt.toISOString(), recurrence);
     setCloningId(null);
+    setHistoryError('');
     loadData();
   };
 
@@ -131,14 +140,36 @@ function History() {
               <div key={r.id} className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
                 {editingId === r.id ? (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%' }}>
-                    <input type="text" className="form-control" value={editTitle} onChange={e => setEditTitle(e.target.value)} />
+                    <input type="text" className="form-control" value={editTitle} onChange={e => { setEditTitle(e.target.value); setHistoryError(''); }} />
                     <div style={{ display: 'flex', gap: '10px' }}>
-                      <input type="date" className="form-control" value={editDate} onChange={e => setEditDate(e.target.value)} style={{ flex: 1 }} />
-                      <input type="time" className="form-control" value={editTime} onChange={e => setEditTime(e.target.value)} style={{ flex: 1 }} />
+                      <input type="date" className="form-control" value={editDate} onChange={e => { setEditDate(e.target.value); setHistoryError(''); }} style={{ flex: 1 }} />
+                      <input type="time" className="form-control" value={editTime} onChange={e => { setEditTime(e.target.value); setHistoryError(''); }} style={{ flex: 1 }} />
                     </div>
+                    {historyError && (
+                      <div style={{ color: 'var(--danger)', fontSize: '0.7rem', marginTop: '2px', marginBottom: '2px' }}>
+                        ⚠️ {historyError}
+                      </div>
+                    )}
                     <div style={{ display: 'flex', gap: '10px' }}>
-                      <button className="btn-primary" onClick={saveEdit} style={{ flex: 1, padding: '8px' }}>Atualizar</button>
-                      <button className="btn-secondary" onClick={() => setEditingId(null)} style={{ flex: 1, padding: '8px' }}>Cancelar</button>
+                      <button className="btn-primary" onClick={saveEdit} style={{ flex: 1, padding: '8px' }}>Salvar</button>
+                      <button className="btn-secondary" onClick={() => { setEditingId(null); setHistoryError(''); }} style={{ flex: 1, padding: '8px' }}>Cancelar</button>
+                    </div>
+                  </div>
+                ) : cloningId === r.id ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%', padding: '10px 0' }}>
+                    <input type="text" className="form-control" value={editTitle} onChange={e => { setEditTitle(e.target.value); setHistoryError(''); }} />
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                      <input type="date" className="form-control" value={editDate} onChange={e => { setEditDate(e.target.value); setHistoryError(''); }} style={{ flex: 1 }} />
+                      <input type="time" className="form-control" value={editTime} onChange={e => { setEditTime(e.target.value); setHistoryError(''); }} style={{ flex: 1 }} />
+                    </div>
+                    {historyError && (
+                      <div style={{ color: 'var(--danger)', fontSize: '0.7rem', marginTop: '2px', marginBottom: '2px' }}>
+                        ⚠️ {historyError}
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                      <button className="btn-primary" onClick={saveClone} style={{ flex: 1, padding: '8px' }}>Clonar</button>
+                      <button className="btn-secondary" onClick={() => { setCloningId(null); setHistoryError(''); }} style={{ flex: 1, padding: '8px' }}>Cancelar</button>
                     </div>
                   </div>
                 ) : (
@@ -156,6 +187,9 @@ function History() {
                       </button>
                       <button className="icon-btn" onClick={() => startEdit(r)} title="Editar">
                         <Edit2 size={16} />
+                      </button>
+                      <button className="icon-btn" onClick={() => startClone(r)} title="Clonar">
+                        <Clock size={16} />
                       </button>
                       <button className="icon-btn" onClick={() => deleteRem(r.id)} style={{ color: 'var(--danger)' }} title="Excluir">
                         <Trash2 size={16} />
@@ -175,14 +209,19 @@ function History() {
                     <div key={r.id} className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', border: '1px solid rgba(255, 107, 107, 0.3)' }}>
                       {cloningId === r.id ? (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%', padding: '10px 0' }}>
-                          <input type="text" className="form-control" value={editTitle} onChange={e => setEditTitle(e.target.value)} />
+                          <input type="text" className="form-control" value={editTitle} onChange={e => { setEditTitle(e.target.value); setHistoryError(''); }} />
                           <div style={{ display: 'flex', gap: '10px' }}>
-                            <input type="date" className="form-control" value={editDate} onChange={e => setEditDate(e.target.value)} style={{ flex: 1 }} />
-                            <input type="time" className="form-control" value={editTime} onChange={e => setEditTime(e.target.value)} style={{ flex: 1 }} />
+                            <input type="date" className="form-control" value={editDate} onChange={e => { setEditDate(e.target.value); setHistoryError(''); }} style={{ flex: 1 }} />
+                            <input type="time" className="form-control" value={editTime} onChange={e => { setEditTime(e.target.value); setHistoryError(''); }} style={{ flex: 1 }} />
                           </div>
+                          {historyError && (
+                            <div style={{ color: 'var(--danger)', fontSize: '0.7rem', marginTop: '2px', marginBottom: '2px' }}>
+                              ⚠️ {historyError}
+                            </div>
+                          )}
                           <div style={{ display: 'flex', gap: '10px' }}>
-                            <button className="btn-primary" onClick={saveClone} style={{ flex: 1, padding: '8px' }}>Agendar Novo</button>
-                            <button className="btn-secondary" onClick={() => setCloningId(null)} style={{ flex: 1, padding: '8px' }}>Cancelar</button>
+                            <button className="btn-primary" onClick={saveClone} style={{ flex: 1, padding: '8px' }}>Clonar</button>
+                            <button className="btn-secondary" onClick={() => { setCloningId(null); setHistoryError(''); }} style={{ flex: 1, padding: '8px' }}>Cancelar</button>
                           </div>
                         </div>
                       ) : (
@@ -195,7 +234,7 @@ function History() {
                             <p style={{ color: 'var(--danger)' }}>Perdido: {new Date(r.datetime).toLocaleString()}</p>
                           </div>
                           <div style={{ display: 'flex', gap: '5px' }}>
-                            <button className="icon-btn" onClick={() => startClone(r)} title="Clonar (Agendar Novamente)">
+                            <button className="icon-btn" onClick={() => startClone(r)} title="Clonar">
                               <Clock size={16} />
                             </button>
                             <button className="icon-btn" onClick={() => deleteRem(r.id)} style={{ color: 'var(--danger)' }} title="Excluir">
@@ -228,14 +267,19 @@ function History() {
               <div key={r.id} className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
                 {cloningId === r.id ? (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%', padding: '10px 0' }}>
-                    <input type="text" className="form-control" value={editTitle} onChange={e => setEditTitle(e.target.value)} />
+                    <input type="text" className="form-control" value={editTitle} onChange={e => { setEditTitle(e.target.value); setHistoryError(''); }} />
                     <div style={{ display: 'flex', gap: '10px' }}>
-                      <input type="date" className="form-control" value={editDate} onChange={e => setEditDate(e.target.value)} style={{ flex: 1 }} />
-                      <input type="time" className="form-control" value={editTime} onChange={e => setEditTime(e.target.value)} style={{ flex: 1 }} />
+                      <input type="date" className="form-control" value={editDate} onChange={e => { setEditDate(e.target.value); setHistoryError(''); }} style={{ flex: 1 }} />
+                      <input type="time" className="form-control" value={editTime} onChange={e => { setEditTime(e.target.value); setHistoryError(''); }} style={{ flex: 1 }} />
                     </div>
+                    {historyError && (
+                      <div style={{ color: 'var(--danger)', fontSize: '0.7rem', marginTop: '2px', marginBottom: '2px' }}>
+                        ⚠️ {historyError}
+                      </div>
+                    )}
                     <div style={{ display: 'flex', gap: '10px' }}>
-                      <button className="btn-primary" onClick={saveClone} style={{ flex: 1, padding: '8px' }}>Agendar Novo</button>
-                      <button className="btn-secondary" onClick={() => setCloningId(null)} style={{ flex: 1, padding: '8px' }}>Cancelar</button>
+                      <button className="btn-primary" onClick={saveClone} style={{ flex: 1, padding: '8px' }}>Clonar</button>
+                      <button className="btn-secondary" onClick={() => { setCloningId(null); setHistoryError(''); }} style={{ flex: 1, padding: '8px' }}>Cancelar</button>
                     </div>
                   </div>
                 ) : (
@@ -250,6 +294,9 @@ function History() {
                     <div style={{ display: 'flex', gap: '5px' }}>
                       <button className="icon-btn" onClick={() => startClone(r)} title="Clonar">
                         <Clock size={16} />
+                      </button>
+                      <button className="icon-btn" onClick={() => deleteRem(r.id)} style={{ color: 'var(--danger)' }} title="Excluir">
+                        <Trash2 size={16} />
                       </button>
                     </div>
                   </div>
