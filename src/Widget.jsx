@@ -101,10 +101,37 @@ function Widget() {
     }
   };
 
+  const simulateUpdate = () => {
+    setUpdateVersion('1.3.0');
+    setUpdateAvailable(true);
+    setUpdateUrl('https://raw.githubusercontent.com/joaovictorcouto/deskwidget/main/package.json');
+    setShowUpdatePanel(true);
+  };
+
   const startUpdate = async () => {
     if (!updateUrl) return;
     setIsDownloading(true);
     setDownloadPercent(0);
+
+    if (updateVersion === '1.3.0') {
+      let percent = 0;
+      const interval = setInterval(() => {
+        percent += 10;
+        setDownloadPercent(percent);
+        if (percent >= 100) {
+          clearInterval(interval);
+          setReadyToRestart(true);
+          setIsDownloading(false);
+          setTimeout(() => {
+            setReadyToRestart(false);
+            setUpdateAvailable(false);
+            setShowUpdatePanel(false);
+          }, 2500);
+        }
+      }, 300);
+      return;
+    }
+
     try {
       const response = await fetch(updateUrl);
       if (!response.ok) throw new Error('Falha no download da atualização');
@@ -815,7 +842,8 @@ function Widget() {
           <img 
             src={settings.theme === 'claro' ? './logo-desk-dark.png' : './logo-desk-light.png'} 
             alt="DeskWidget" 
-            style={{ height: '24px', objectFit: 'contain' }} 
+            style={{ height: '24px', objectFit: 'contain', cursor: 'pointer' }} 
+            onDoubleClick={simulateUpdate}
             onError={(e) => { 
               if (e.target.src.includes('logo-desk-dark.png') || e.target.src.includes('logo-desk-light.png')) {
                 e.target.src = './logo-desk.png';
@@ -825,7 +853,7 @@ function Widget() {
               }
             }} 
           />
-          <h1 id="fallback-logo-text" style={{ display: 'none', margin: 0, fontSize: '1rem', fontWeight: 600 }}>DeskWidget</h1>
+          <h1 id="fallback-logo-text" style={{ display: 'none', margin: 0, fontSize: '1rem', fontWeight: 600, cursor: 'pointer' }} onDoubleClick={simulateUpdate}>DeskWidget</h1>
           <button className="icon-btn" onClick={toggleTheme} style={{ marginLeft: 'auto', marginRight: '8px' }}>
             {settings.theme === 'claro' ? <Moon size={18} /> : <Sun size={18} />}
           </button>

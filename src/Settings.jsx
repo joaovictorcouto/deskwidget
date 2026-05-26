@@ -64,6 +64,23 @@ function Settings() {
     if (!updateUrl) return;
     setUpdateStatus('downloading');
     setDownloadPercent(0);
+    
+    if (updateVersion === '1.3.0') {
+      let percent = 0;
+      const interval = setInterval(() => {
+        percent += 10;
+        setDownloadPercent(percent);
+        if (percent >= 100) {
+          clearInterval(interval);
+          setUpdateStatus('readyToRestart');
+          setTimeout(() => {
+            setUpdateStatus('upToDate');
+          }, 2500);
+        }
+      }, 300);
+      return;
+    }
+
     try {
       const response = await fetch(updateUrl);
       if (!response.ok) throw new Error('Erro ao baixar');
@@ -634,9 +651,22 @@ function Settings() {
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                       <span style={{ fontWeight: 600, color: 'var(--success)' }}>✓ O DeskWidget está atualizado!</span>
                       <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Você já está utilizando a versão mais recente.</span>
-                      <button className="btn-secondary" style={{ width: 'auto', padding: '6px 12px', fontSize: '0.75rem', marginTop: '8px', alignSelf: 'flex-start' }} onClick={checkUpdates}>
-                        Verificar novamente
-                      </button>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button className="btn-secondary" style={{ width: 'auto', padding: '6px 12px', fontSize: '0.75rem', marginTop: '8px', alignSelf: 'flex-start' }} onClick={checkUpdates}>
+                          Verificar novamente
+                        </button>
+                        <button 
+                          className="btn-secondary" 
+                          style={{ width: 'auto', padding: '6px 12px', fontSize: '0.75rem', marginTop: '8px', alignSelf: 'flex-start', borderColor: 'var(--primary)', color: 'var(--primary)' }} 
+                          onClick={() => {
+                            setUpdateVersion('1.3.0');
+                            setUpdateStatus('available');
+                            setUpdateUrl('https://raw.githubusercontent.com/joaovictorcouto/deskwidget/main/package.json');
+                          }}
+                        >
+                          🧪 Simular Update
+                        </button>
+                      </div>
                     </div>
                   )}
 
