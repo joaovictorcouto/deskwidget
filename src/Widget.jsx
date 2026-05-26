@@ -68,7 +68,7 @@ function Widget() {
 
   const checkUpdates = async (silent = true) => {
     try {
-      const response = await fetch('https://api.github.com/repos/CoutoApps/DeskWidget/releases/latest');
+      const response = await fetch('https://api.github.com/repos/joaovictorcouto/deskwidget/releases/latest');
       if (!response.ok) return;
       const data = await response.json();
       const latestVer = data.tag_name.replace('v', '');

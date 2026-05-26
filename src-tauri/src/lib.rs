@@ -321,8 +321,9 @@ async fn open_settings(app: tauri::AppHandle) -> Result<(), String> {
         tauri::WebviewUrl::App("index.html#/settings".into()),
     )
     .title("Configurações")
-    .inner_size(560.0, 703.0)
-    .min_inner_size(560.0, 703.0)
+    .inner_size(560.0, 735.0)
+    .min_inner_size(560.0, 735.0)
+    .resizable(false)
     .transparent(true)
     .decorations(false)
     .shadow(false)

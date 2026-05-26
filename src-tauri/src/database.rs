@@ -472,7 +472,7 @@ pub fn reset_settings(app: tauri::AppHandle, state: tauri::State<AppState>) -> R
     }
     
     if let Some(w) = app.get_webview_window("settings") {
-        let _ = w.set_size(tauri::Size::Logical(tauri::LogicalSize { width: 560.0, height: 703.0 }));
+        let _ = w.set_size(tauri::Size::Logical(tauri::LogicalSize { width: 560.0, height: 735.0 }));
         let _ = w.center();
     }
     if let Some(w) = app.get_webview_window("history") {
