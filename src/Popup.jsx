@@ -277,57 +277,6 @@ function PositionerPopup() {
   );
 }
 
-// ─── Roteador de popups ───────────────────────────────────────────────────────
-function Popup() {
-  const [config, setConfig] = useState(null);
-  const [progress, setProgress] = useState(100);
-
-  useEffect(() => {
-    let timer;
-    try {
-      const hash = window.location.hash;
-      if (hash.includes('?config=')) {
-        const data = JSON.parse(decodeURIComponent(hash.split('?config=')[1]));
-        setConfig(data);
-
-        // Som de notificação
-        if ((data.type === 'reminder' || data.type === 'pomodoro') && window.api) {
-          window.api.getSettings().then(s => {
-            if (s.soundEnabled !== 'false' && s.soundEnabled !== false) {
-              const vol = s.soundVolume ? parseInt(s.soundVolume) / 100 : 0.8;
-              const type = data.type === 'pomodoro' ? (s.pomodoroSound || 'duplo') : (s.soundType || 'duplo');
-              playNotificationSound(vol, type);
-            }
-          });
-        }
-        
-        // Progress bar and auto-close logic is global now
-        if (data.autoClose) {
-          const duration = data.autoClose;
-          let current = duration;
-          timer = setInterval(() => {
-            current -= 50;
-            setProgress(Math.max(0, (current / duration) * 100));
-            if (current <= 0) { clearInterval(timer); window.api?.closeWindow(); }
-          }, 50);
-        }
-      }
-    } catch (e) {
-      console.error('Failed to parse popup config', e);
-    }
-
-    const onKey = (e) => { if (e.key === 'Escape') window.api?.closeWindow(); };
-    window.addEventListener('keydown', onKey);
-    return () => {
-      window.removeEventListener('keydown', onKey);
-      if (timer) clearInterval(timer);
-    };
-  }, []);
-
-  if (!config) return <div style={{ padding: '20px', color: 'var(--text-muted)', fontSize: '0.8rem' }}>Carregando...</div>;
-
-  const configWithProgress = { ...config, progressBar: config.autoClose ? progress : undefined };
-
 // ─── Popup de Agendamento de Atualização ──────────────────────────────────────
 function ScheduleUpdatePopup({ config }) {
   const [date, setDate] = useState('');
