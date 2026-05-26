@@ -1055,14 +1055,14 @@ function Widget() {
         <div className="footer" style={{ padding: '10px 20px', fontSize: '0.65rem', color: 'var(--text-muted)', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', whiteSpace: 'nowrap', overflow: 'hidden' }}>
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', display: 'flex', gap: '15px' }}>
             <span>📝 {todaysCompletedCount}/{todaysTasks.length} concluídas hoje</span>
-            <span>🔔 {reminders.filter(r => r.status === 'agendado' || r.status === 'pausado').length} agendados</span>
-            {reminders.some(r => r.status === 'perdido') && (
+            <span>🔔 {reminders.filter(r => (r.status === 'agendado' && new Date(r.datetime) >= new Date()) || r.status === 'pausado').length} agendados</span>
+            {reminders.some(r => r.status === 'perdido' || (r.status === 'agendado' && new Date(r.datetime) < new Date())) && (
               <span 
                 className="pulse-error" 
                 style={{ color: 'var(--danger)', cursor: 'pointer', fontWeight: 'bold' }}
-                onClick={() => { window.api?.showHistoryTab('historico') }} // Usaremos IPC para abrir focado
+                onClick={openHistory}
               >
-                ⚠️ {reminders.filter(r => r.status === 'perdido').length} Falhas
+                ⚠️ {reminders.filter(r => r.status === 'perdido' || (r.status === 'agendado' && new Date(r.datetime) < new Date())).length} com Erro
               </span>
             )}
           </span>

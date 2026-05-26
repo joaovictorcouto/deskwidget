@@ -95,8 +95,8 @@ function History() {
     setEditTime(`${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`);
   };
 
-  const agendados = reminders.filter(r => r.status === 'agendado' || r.status === 'pausado');
-  const falhas = reminders.filter(r => r.status === 'perdido');
+  const agendados = reminders.filter(r => (r.status === 'agendado' && new Date(r.datetime) >= new Date()) || r.status === 'pausado');
+  const falhas = reminders.filter(r => r.status === 'perdido' || (r.status === 'agendado' && new Date(r.datetime) < new Date()));
   const historico = reminders.filter(r => r.status === 'concluido' || r.status === 'cancelado');
 
   return (
