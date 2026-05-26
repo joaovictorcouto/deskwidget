@@ -1391,12 +1391,20 @@ function Widget() {
           <div className="updater-footer-panel">
             <div className="updater-actions">
               {isDownloading ? (
-                <span style={{ fontSize: '0.65rem', fontWeight: 600, color: 'var(--primary)' }}>
-                  {readyToRestart ? 'Aplicando atualização...' : `Baixando atualização: ${downloadPercent}%`}
-                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%' }}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" strokeWidth="2.5" strokeLinecap="round" style={{ animation: 'spin 1s linear infinite', flexShrink: 0 }}>
+                    <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+                  </svg>
+                  <span style={{ fontSize: '0.65rem', fontWeight: 600, color: 'var(--primary)', flex: 1 }}>
+                    {readyToRestart ? '✓ Instalando...' : `Baixando v${updateVersion}: ${downloadPercent}%`}
+                  </span>
+                  <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)', fontWeight: 500 }}>
+                    {readyToRestart ? '' : `${downloadPercent}/100`}
+                  </span>
+                </div>
               ) : (
                 <>
-                  <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>Versão {updateVersion} disponível</span>
+                  <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>⚡ v{updateVersion} disponível</span>
                   <div style={{ display: 'flex', gap: '5px' }}>
                     <button className="updater-btn update" onClick={startUpdate}>
                       Atualizar
@@ -1412,7 +1420,7 @@ function Widget() {
               )}
             </div>
             {isDownloading && (
-              <div className="update-progress-bar-container">
+              <div className="update-progress-bar-container" style={{ marginTop: '6px' }}>
                 <div className="update-progress-bar-fill" style={{ width: `${downloadPercent}%` }} />
               </div>
             )}
