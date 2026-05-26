@@ -12,7 +12,7 @@ function Settings() {
   const [confirmConfig, setConfirmConfig] = useState({ isOpen: false, message: '', onConfirm: null });
 
   // Estados do Updater na aba Sobre
-  const CURRENT_VERSION = '1.2.2';
+  const CURRENT_VERSION = '1.2.3';
   const [updateStatus, setUpdateStatus] = useState('idle');
   const [updateVersion, setUpdateVersion] = useState('');
   const [downloadPercent, setDownloadPercent] = useState(0);

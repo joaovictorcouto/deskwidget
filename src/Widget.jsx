@@ -44,12 +44,17 @@ function Widget() {
   const [selectedTaskTag, setSelectedTaskTag] = useState('');
   const [showTaskTagMenu, setShowTaskTagMenu] = useState(false);
   const taskTagMenuRef = useRef(null);
+  const [showTagManager, setShowTagManager] = useState(false);
+  const [newTagInputVal, setNewTagInputVal] = useState('');
+  const [newTaskTagInputVal, setNewTaskTagInputVal] = useState('');
+  const [managerNewTagName, setManagerNewTagName] = useState('');
+  const [managerNewTagColor, setManagerNewTagColor] = useState('hsl(263, 90%, 50%)');
 
   // Estado para CustomConfirm
   const [confirmConfig, setConfirmConfig] = useState({ isOpen: false, message: '', onConfirm: null });
 
   // Estados de Atualização (Updater)
-  const CURRENT_VERSION = '1.2.2';
+  const CURRENT_VERSION = '1.2.3';
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [updateVersion, setUpdateVersion] = useState('');
   const [updateUrl, setUpdateUrl] = useState('');
@@ -214,7 +219,7 @@ function Widget() {
     if (window.api) {
       const cleanTagName = tagName.trim();
       if (cleanTagName) {
-        const tagColor = getTagColor(cleanTagName);
+        const tagColor = getTagColorWithSaved(cleanTagName);
         await window.api.updateSingleTaskTag(taskId, cleanTagName, tagColor);
         addTagToSaved(cleanTagName);
       } else {
@@ -410,6 +415,23 @@ function Widget() {
 
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
+        if (confirmConfig.isOpen) {
+          setConfirmConfig({ isOpen: false, message: '', onConfirm: null });
+          return;
+        }
+        if (showTagManager) {
+          setShowTagManager(false);
+          return;
+        }
+        if (showTagMenu) {
+          setShowTagMenu(false);
+          return;
+        }
+        if (showTaskTagMenu) {
+          setShowTaskTagMenu(false);
+          setEditingTaskTagId(null);
+          return;
+        }
         setIsExpanded(false);
         window.api?.collapseWindow();
       }
@@ -430,7 +452,7 @@ function Widget() {
       if (removePreviewListener) removePreviewListener();
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isExpanded, settings.delay]);
+  }, [isExpanded, settings.delay, confirmConfig.isOpen, showTagManager, showTagMenu, showTaskTagMenu]);
   
   useEffect(() => {
     let interval = null;
@@ -632,6 +654,13 @@ function Widget() {
     return `hsl(${hue}, 80%, 45%)`;
   };
 
+  const getTagColorWithSaved = (tagName) => {
+    if (!tagName) return 'var(--text-muted)';
+    const saved = savedTags.find(t => t.name.toLowerCase() === tagName.toLowerCase());
+    if (saved) return saved.color;
+    return getTagColor(tagName);
+  };
+
   const addTagToSaved = (tagName) => {
     const exists = savedTags.some(t => t.name.toLowerCase() === tagName.toLowerCase());
     if (!exists && window.api) {
@@ -645,7 +674,7 @@ function Widget() {
   const handleAddTask = async (e) => {
     if (e.key === 'Enter' && newTaskTitle.trim() !== '') {
       if (window.api) {
-        await window.api.addTask(newTaskTitle, selectedTag || null, selectedTag ? getTagColor(selectedTag) : null);
+        await window.api.addTask(newTaskTitle, selectedTag || null, selectedTag ? getTagColorWithSaved(selectedTag) : null);
         if (selectedTag) addTagToSaved(selectedTag);
         setNewTaskTitle('');
         setSelectedTag('');
@@ -713,7 +742,7 @@ function Widget() {
     }
     const newName = editingTagValue.trim();
     if (newName !== editingTag) {
-      const newColor = getTagColor(newName);
+      const newColor = getTagColorWithSaved(newName);
       const newTags = savedTags.map(t => t.name === editingTag ? { name: newName, color: newColor } : t);
       setSavedTags(newTags);
       if (window.api) {
@@ -724,6 +753,79 @@ function Widget() {
       if (selectedTag === editingTag) setSelectedTag(newName);
     }
     setEditingTag(null);
+  };
+
+  const handleRenameTagInManager = async (oldName, newName) => {
+    const trimmedNew = newName.trim();
+    if (!trimmedNew || trimmedNew === oldName) return;
+
+    const exists = savedTags.some(t => t.name.toLowerCase() === trimmedNew.toLowerCase());
+    if (exists) {
+      alert("Uma etiqueta com este nome já existe.");
+      return;
+    }
+
+    const tagToUpdate = savedTags.find(t => t.name === oldName);
+    if (!tagToUpdate) return;
+
+    const newColor = tagToUpdate.color;
+    const newTags = savedTags.map(t => t.name === oldName ? { name: trimmedNew, color: newColor } : t);
+    setSavedTags(newTags);
+    
+    if (window.api) {
+      await window.api.updateSetting('savedTags', JSON.stringify(newTags));
+      await window.api.updateTaskTag(oldName, trimmedNew, newColor);
+      await loadData();
+    }
+    if (selectedTag === oldName) setSelectedTag(trimmedNew);
+  };
+
+  const handleColorChangeInManager = async (tagName, newColor) => {
+    const newTags = savedTags.map(t => t.name === tagName ? { name: tagName, color: newColor } : t);
+    setSavedTags(newTags);
+
+    if (window.api) {
+      await window.api.updateSetting('savedTags', JSON.stringify(newTags));
+      await window.api.updateTaskTag(tagName, tagName, newColor);
+      await loadData();
+    }
+  };
+
+  const handleCreateTagInManager = async () => {
+    const trimmed = managerNewTagName.trim();
+    if (!trimmed) return;
+
+    const exists = savedTags.some(t => t.name.toLowerCase() === trimmed.toLowerCase());
+    if (exists) {
+      alert("Uma etiqueta com este nome já existe.");
+      return;
+    }
+
+    const newTag = { name: trimmed, color: managerNewTagColor };
+    const newSavedTags = [...savedTags, newTag];
+    setSavedTags(newSavedTags);
+
+    if (window.api) {
+      await window.api.updateSetting('savedTags', JSON.stringify(newSavedTags));
+      await loadData();
+    }
+    setManagerNewTagName('');
+  };
+
+  const moveTag = async (index, direction) => {
+    const newTags = [...savedTags];
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= newTags.length) return;
+
+    const temp = newTags[index];
+    newTags[index] = newTags[targetIndex];
+    newTags[targetIndex] = temp;
+
+    setSavedTags(newTags);
+    if (window.api) {
+      await window.api.updateSetting('savedTags', JSON.stringify(newTags));
+      await loadData();
+    }
   };
 
   const handleAddReminder = async () => {
@@ -984,7 +1086,7 @@ function Widget() {
                 {settings.enableTags === 'true' && (
                   <div 
                     ref={tagMenuRef}
-                    style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', cursor: 'pointer', color: selectedTag ? getTagColor(selectedTag) : 'var(--text-muted)' }}
+                    style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', cursor: 'pointer', color: selectedTag ? getTagColorWithSaved(selectedTag) : 'var(--text-muted)' }}
                     onClick={() => setShowTagMenu(!showTagMenu)}
                   >
                     <Tag size={16} />
@@ -1029,14 +1131,41 @@ function Widget() {
                         <input 
                           type="text" 
                           className="form-control" 
-                          style={{ fontSize: '0.75rem', padding: '4px' }}
+                          style={{ fontSize: '0.75rem', padding: '4px', backgroundColor: 'var(--bg-hover)', color: 'var(--text-main)', border: '1px solid var(--border)' }}
                           placeholder="Nova tag..."
-                          value={selectedTag}
-                          onChange={(e) => setSelectedTag(e.target.value)}
+                          value={newTagInputVal}
+                          onChange={(e) => setNewTagInputVal(e.target.value)}
                           onKeyDown={(e) => {
-                            if (e.key === 'Enter') setShowTagMenu(false);
+                            if (e.key === 'Enter') {
+                              const cleanVal = newTagInputVal.trim();
+                              if (cleanVal) {
+                                addTagToSaved(cleanVal);
+                                setSelectedTag(cleanVal);
+                              }
+                              setNewTagInputVal('');
+                              setShowTagMenu(false);
+                            }
                           }}
                         />
+                        <div 
+                          onClick={() => { setShowTagMenu(false); setShowTagManager(true); }}
+                          style={{ 
+                            marginTop: '8px', 
+                            paddingTop: '6px', 
+                            borderTop: '1px solid var(--border)', 
+                            textAlign: 'center', 
+                            fontSize: '0.7rem', 
+                            color: 'var(--primary)', 
+                            cursor: 'pointer',
+                            fontWeight: 'bold',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '4px'
+                          }}
+                        >
+                          <Settings size={10} /> Gerenciar Etiquetas
+                        </div>
                       </div>
                     )}
                   </div>
@@ -1157,14 +1286,40 @@ function Widget() {
                                   <input 
                                     type="text" 
                                     className="form-control" 
-                                    style={{ fontSize: '0.75rem', padding: '4px', height: '24px' }}
+                                    style={{ fontSize: '0.75rem', padding: '4px', height: '24px', backgroundColor: 'var(--bg-hover)', color: 'var(--text-main)', border: '1px solid var(--border)' }}
                                     placeholder="Nova tag..."
-                                    value={selectedTaskTag}
-                                    onChange={(e) => setSelectedTaskTag(e.target.value)}
+                                    value={newTaskTagInputVal}
+                                    onChange={(e) => setNewTaskTagInputVal(e.target.value)}
                                     onKeyDown={(e) => {
-                                      if (e.key === 'Enter') handleUpdateTaskTag(task.id, selectedTaskTag);
+                                      if (e.key === 'Enter') {
+                                        const cleanVal = newTaskTagInputVal.trim();
+                                        if (cleanVal) {
+                                          handleUpdateTaskTag(task.id, cleanVal);
+                                        }
+                                        setNewTaskTagInputVal('');
+                                        setShowTaskTagMenu(false);
+                                      }
                                     }}
                                   />
+                                  <div 
+                                    onClick={() => { setShowTaskTagMenu(false); setEditingTaskTagId(null); setShowTagManager(true); }}
+                                    style={{ 
+                                      marginTop: '8px', 
+                                      paddingTop: '6px', 
+                                      borderTop: '1px solid var(--border)', 
+                                      textAlign: 'center', 
+                                      fontSize: '0.7rem', 
+                                      color: 'var(--primary)', 
+                                      cursor: 'pointer',
+                                      fontWeight: 'bold',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      gap: '4px'
+                                    }}
+                                  >
+                                    <Settings size={10} /> Gerenciar Etiquetas
+                                  </div>
                                 </div>
                               )}
                             </span>
@@ -1289,14 +1444,40 @@ function Widget() {
                             <input 
                               type="text" 
                               className="form-control" 
-                              style={{ fontSize: '0.75rem', padding: '4px', height: '24px' }}
+                              style={{ fontSize: '0.75rem', padding: '4px', height: '24px', backgroundColor: 'var(--bg-hover)', color: 'var(--text-main)', border: '1px solid var(--border)' }}
                               placeholder="Nova tag..."
-                              value={selectedTaskTag}
-                              onChange={(e) => setSelectedTaskTag(e.target.value)}
+                              value={newTaskTagInputVal}
+                              onChange={(e) => setNewTaskTagInputVal(e.target.value)}
                               onKeyDown={(e) => {
-                                if (e.key === 'Enter') handleUpdateTaskTag(task.id, selectedTaskTag);
+                                if (e.key === 'Enter') {
+                                  const cleanVal = newTaskTagInputVal.trim();
+                                  if (cleanVal) {
+                                    handleUpdateTaskTag(task.id, cleanVal);
+                                  }
+                                  setNewTaskTagInputVal('');
+                                  setShowTaskTagMenu(false);
+                                }
                               }}
                             />
+                            <div 
+                              onClick={() => { setShowTaskTagMenu(false); setEditingTaskTagId(null); setShowTagManager(true); }}
+                              style={{ 
+                                marginTop: '8px', 
+                                paddingTop: '6px', 
+                                borderTop: '1px solid var(--border)', 
+                                textAlign: 'center', 
+                                fontSize: '0.7rem', 
+                                color: 'var(--primary)', 
+                                cursor: 'pointer',
+                                fontWeight: 'bold',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '4px'
+                              }}
+                            >
+                              <Settings size={10} /> Gerenciar Etiquetas
+                            </div>
                           </div>
                         )}
                       </span>
@@ -1507,6 +1688,385 @@ function Widget() {
         onConfirm={confirmConfig.onConfirm}
         onCancel={confirmConfig.onCancel}
       />
+      {showTagManager && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.65)',
+          backdropFilter: 'blur(4px)',
+          zIndex: 9999,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '15px'
+        }} onClick={() => setShowTagManager(false)}>
+          <div style={{
+            backgroundColor: 'var(--bg-main)',
+            border: '1px solid var(--border)',
+            borderRadius: '12px',
+            width: '100%',
+            maxWidth: '320px',
+            maxHeight: '440px',
+            display: 'flex',
+            flexDirection: 'column',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+            overflow: 'hidden',
+          }} onClick={(e) => e.stopPropagation()}>
+            {/* Header */}
+            <div style={{
+              padding: '12px 15px',
+              borderBottom: '1px solid var(--border)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
+              <span style={{ fontSize: '0.8rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-main)' }}>
+                <Tag size={14} style={{ color: 'var(--primary)' }} />
+                Gerenciar Etiquetas
+              </span>
+              <span 
+                style={{ cursor: 'pointer', padding: '4px 8px', fontSize: '0.9rem', color: 'var(--text-muted)' }} 
+                onClick={() => setShowTagManager(false)}
+              >
+                ✕
+              </span>
+            </div>
+
+            {/* Adicionar Nova Etiqueta Section */}
+            <div style={{
+              padding: '10px 15px',
+              borderBottom: '1px solid var(--border)',
+              backgroundColor: 'rgba(255,255,255,0.01)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '6px'
+            }}>
+              <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                <input
+                  type="text"
+                  className="form-control"
+                  style={{
+                    fontSize: '0.75rem',
+                    padding: '4px 8px',
+                    height: '26px',
+                    flex: 1,
+                    backgroundColor: 'var(--bg-hover)',
+                    color: 'var(--text-main)',
+                    border: '1px solid var(--border)',
+                    borderRadius: '6px'
+                  }}
+                  placeholder="Nova etiqueta..."
+                  value={managerNewTagName}
+                  onChange={(e) => setManagerNewTagName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleCreateTagInManager();
+                  }}
+                />
+                <button
+                  onClick={handleCreateTagInManager}
+                  style={{
+                    fontSize: '1rem',
+                    height: '26px',
+                    width: '30px',
+                    borderRadius: '6px',
+                    backgroundColor: 'var(--primary)',
+                    color: '#fff',
+                    border: 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontWeight: 'bold',
+                    cursor: 'pointer',
+                    flexShrink: 0
+                  }}
+                >
+                  +
+                </button>
+              </div>
+              
+              {/* Escolha de cor para a nova etiqueta */}
+              <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', alignItems: 'center', marginTop: '2px' }}>
+                <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginRight: '2px' }}>Cor:</span>
+                {[
+                  'hsl(263, 90%, 50%)', // Purple
+                  'hsl(217, 91%, 60%)', // Blue
+                  'hsl(142, 70%, 45%)', // Green
+                  'hsl(38, 92%, 50%)',  // Yellow
+                  'hsl(0, 84%, 60%)',   // Red
+                  'hsl(330, 81%, 60%)',  // Pink
+                  'hsl(188, 86%, 53%)',  // Cyan
+                  'hsl(220, 9%, 46%)'    // Gray
+                ].map(color => (
+                  <span
+                    key={`new-${color}`}
+                    onClick={() => setManagerNewTagColor(color)}
+                    style={{
+                      width: '10px',
+                      height: '10px',
+                      borderRadius: '50%',
+                      backgroundColor: color,
+                      cursor: 'pointer',
+                      border: managerNewTagColor === color ? '2px solid #fff' : '1px solid rgba(0,0,0,0.3)',
+                      boxShadow: managerNewTagColor === color ? '0 0 3px rgba(255,255,255,0.8)' : 'none',
+                      transform: managerNewTagColor === color ? 'scale(1.15)' : 'scale(1.0)',
+                      transition: 'transform 0.1s ease'
+                    }}
+                  />
+                ))}
+                <span 
+                  style={{
+                    position: 'relative',
+                    width: '10px',
+                    height: '10px',
+                    borderRadius: '50%',
+                    background: 'linear-gradient(to right, red, orange, yellow, green, blue, indigo, violet)',
+                    cursor: 'pointer',
+                    border: '1px solid rgba(255,255,255,0.3)',
+                    overflow: 'hidden',
+                    display: 'inline-block',
+                    marginLeft: '2px'
+                  }}
+                  title="Cor personalizada..."
+                >
+                  <input 
+                    type="color" 
+                    value={managerNewTagColor} 
+                    onChange={(e) => setManagerNewTagColor(e.target.value)}
+                    style={{
+                      position: 'absolute',
+                      top: '-5px',
+                      left: '-5px',
+                      width: '20px',
+                      height: '20px',
+                      opacity: 0,
+                      cursor: 'pointer'
+                    }}
+                  />
+                </span>
+              </div>
+            </div>
+
+            {/* List */}
+            <div className="custom-scrollbar" style={{
+              flex: 1,
+              overflowY: 'auto',
+              padding: '12px 15px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '10px'
+            }}>
+              {savedTags.length === 0 ? (
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'center', padding: '30px 0' }}>
+                  Nenhuma etiqueta criada.
+                </div>
+              ) : (
+                savedTags.map((tag, idx) => {
+                  const curatedColors = [
+                    'hsl(263, 90%, 50%)', // Purple
+                    'hsl(217, 91%, 60%)', // Blue
+                    'hsl(142, 70%, 45%)', // Green
+                    'hsl(38, 92%, 50%)',  // Yellow
+                    'hsl(0, 84%, 60%)',   // Red
+                    'hsl(330, 81%, 60%)',  // Pink
+                    'hsl(188, 86%, 53%)',  // Cyan
+                    'hsl(220, 9%, 46%)'    // Gray
+                  ];
+
+                  // Calcular a contagem de tarefas que utilizam esta tag
+                  const taskCount = tasks.filter(t => t.tag?.toLowerCase() === tag.name.toLowerCase()).length;
+
+                  return (
+                    <div 
+                      key={tag.name} 
+                      style={{ 
+                        display: 'flex', 
+                        flexDirection: 'column', 
+                        gap: '6px', 
+                        padding: '8px', 
+                        borderRadius: '8px', 
+                        border: '1px solid var(--border)', 
+                        backgroundColor: 'rgba(255,255,255,0.02)' 
+                      }}
+                    >
+                      {/* Name input and Controls */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        {/* Up/Down Sorter Arrows */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
+                          <button
+                            disabled={idx === 0}
+                            onClick={() => moveTag(idx, 'up')}
+                            style={{
+                              background: 'transparent',
+                              border: 'none',
+                              color: idx === 0 ? 'rgba(255,255,255,0.1)' : 'var(--text-muted)',
+                              cursor: idx === 0 ? 'default' : 'pointer',
+                              padding: 0,
+                              fontSize: '0.55rem',
+                              lineHeight: 1,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center'
+                            }}
+                            title="Mover para cima"
+                          >
+                            ▲
+                          </button>
+                          <button
+                            disabled={idx === savedTags.length - 1}
+                            onClick={() => moveTag(idx, 'down')}
+                            style={{
+                              background: 'transparent',
+                              border: 'none',
+                              color: idx === savedTags.length - 1 ? 'rgba(255,255,255,0.1)' : 'var(--text-muted)',
+                              cursor: idx === savedTags.length - 1 ? 'default' : 'pointer',
+                              padding: 0,
+                              fontSize: '0.55rem',
+                              lineHeight: 1,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center'
+                            }}
+                            title="Mover para baixo"
+                          >
+                            ▼
+                          </button>
+                        </div>
+
+                        <input
+                          type="text"
+                          className="form-control"
+                          style={{ 
+                            fontSize: '0.75rem', 
+                            padding: '4px 8px', 
+                            height: '24px', 
+                            flex: 1, 
+                            backgroundColor: 'var(--bg-hover)', 
+                            color: 'var(--text-main)', 
+                            border: '1px solid var(--border)' 
+                          }}
+                          defaultValue={tag.name}
+                          onBlur={(e) => handleRenameTagInManager(tag.name, e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              handleRenameTagInManager(tag.name, e.target.value);
+                              e.target.blur();
+                            }
+                          }}
+                        />
+
+                        {/* Task Count Badge */}
+                        <span 
+                          style={{ 
+                            fontSize: '0.62rem', 
+                            padding: '2px 5px', 
+                            borderRadius: '4px', 
+                            backgroundColor: 'rgba(255,255,255,0.08)', 
+                            color: 'var(--text-muted)', 
+                            fontWeight: 'bold',
+                            whiteSpace: 'nowrap'
+                          }}
+                          title={`${taskCount} tarefas usam esta etiqueta`}
+                        >
+                          {taskCount}
+                        </span>
+
+                        <button
+                          style={{
+                            background: 'transparent',
+                            border: 'none',
+                            color: 'var(--danger)',
+                            cursor: 'pointer',
+                            padding: '2px 4px',
+                            display: 'flex',
+                            alignItems: 'center'
+                          }}
+                          onClick={() => handleDeleteTag(tag.name)}
+                          title="Excluir etiqueta"
+                        >
+                          ✕
+                        </button>
+                      </div>
+
+                      {/* Color Selector Grid */}
+                      <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', alignItems: 'center' }}>
+                        {curatedColors.map(color => (
+                          <span
+                            key={color}
+                            onClick={() => handleColorChangeInManager(tag.name, color)}
+                            style={{
+                              width: '12px',
+                              height: '12px',
+                              borderRadius: '50%',
+                              backgroundColor: color,
+                              cursor: 'pointer',
+                              border: tag.color === color ? '2px solid #fff' : '1px solid rgba(0,0,0,0.3)',
+                              boxShadow: tag.color === color ? '0 0 4px rgba(255,255,255,0.8)' : 'none',
+                              transform: tag.color === color ? 'scale(1.15)' : 'scale(1.0)',
+                              transition: 'transform 0.1s ease'
+                            }}
+                          />
+                        ))}
+                        <span 
+                          style={{
+                            position: 'relative',
+                            width: '12px',
+                            height: '12px',
+                            borderRadius: '50%',
+                            background: 'linear-gradient(to right, red, orange, yellow, green, blue, indigo, violet)',
+                            cursor: 'pointer',
+                            border: !curatedColors.includes(tag.color) ? '2px solid #fff' : '1px solid rgba(0,0,0,0.3)',
+                            boxShadow: !curatedColors.includes(tag.color) ? '0 0 4px rgba(255,255,255,0.8)' : 'none',
+                            transform: !curatedColors.includes(tag.color) ? 'scale(1.15)' : 'scale(1.0)',
+                            overflow: 'hidden',
+                            display: 'inline-block',
+                            marginLeft: '2px'
+                          }}
+                          title="Cor personalizada (hex)..."
+                        >
+                          <input 
+                            type="color" 
+                            value={tag.color.startsWith('#') ? tag.color : '#8b5cf6'} 
+                            onChange={(e) => handleColorChangeInManager(tag.name, e.target.value)}
+                            style={{
+                              position: 'absolute',
+                              top: '-5px',
+                              left: '-5px',
+                              width: '24px',
+                              height: '24px',
+                              opacity: 0,
+                              cursor: 'pointer'
+                            }}
+                          />
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Footer */}
+            <div style={{
+              padding: '10px 15px',
+              borderTop: '1px solid var(--border)',
+              backgroundColor: 'rgba(0,0,0,0.15)',
+              display: 'flex',
+              justifyContent: 'flex-end'
+            }}>
+              <button 
+                className="btn-primary" 
+                style={{ fontSize: '0.72rem', padding: '5px 12px', width: '100%' }}
+                onClick={() => setShowTagManager(false)}
+              >
+                Concluir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

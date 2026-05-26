@@ -19,7 +19,7 @@ export default function CustomConfirm({ isOpen, message, onConfirm, onCancel }) 
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      zIndex: 9999,
+      zIndex: 99999,
       padding: '20px',
       userSelect: 'none'
     }}>
