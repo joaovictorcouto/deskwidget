@@ -1,11 +1,97 @@
 import React, { useState, useEffect } from 'react';
-import { X, Settings as SettingsIcon, Palette, Cpu, Volume2, RotateCcw, Move } from 'lucide-react';
+import { X, Settings as SettingsIcon, Palette, Cpu, Volume2, RotateCcw, Move, Info, RefreshCw } from 'lucide-react';
 import { playNotificationSound } from './utils/audio.js';
+import CustomConfirm from './components/CustomConfirm';
 
 function Settings() {
   const [settings, setSettings] = useState({});
   const [localSettings, setLocalSettings] = useState({});
   const [activeTab, setActiveTab] = useState('geral');
+  
+  // Estado para CustomConfirm
+  const [confirmConfig, setConfirmConfig] = useState({ isOpen: false, message: '', onConfirm: null });
+
+  // Estados do Updater na aba Sobre
+  const CURRENT_VERSION = '1.1.1';
+  const [updateStatus, setUpdateStatus] = useState('idle');
+  const [updateVersion, setUpdateVersion] = useState('');
+  const [downloadPercent, setDownloadPercent] = useState(0);
+  const [updateUrl, setUpdateUrl] = useState('');
+
+  const compareVersions = (v1, v2) => {
+    const parts1 = v1.split('.').map(Number);
+    const parts2 = v2.split('.').map(Number);
+    for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
+      const p1 = parts1[i] || 0;
+      const p2 = parts2[i] || 0;
+      if (p1 > p2) return 1;
+      if (p1 < p2) return -1;
+    }
+    return 0;
+  };
+
+  const checkUpdates = async () => {
+    setUpdateStatus('checking');
+    try {
+      const response = await fetch('https://api.github.com/repos/CoutoApps/DeskWidget/releases/latest');
+      if (!response.ok) throw new Error('Não foi possível conectar');
+      const data = await response.json();
+      const latestVer = data.tag_name.replace('v', '');
+      
+      const compare = compareVersions(latestVer, CURRENT_VERSION);
+      if (compare > 0) {
+        setUpdateVersion(latestVer);
+        setUpdateStatus('available');
+        const exeAsset = data.assets.find(asset => asset.name.endsWith('.exe') || asset.name.includes('setup'));
+        if (exeAsset) {
+          setUpdateUrl(exeAsset.browser_download_url);
+        } else {
+          setUpdateUrl(data.assets[0]?.browser_download_url || data.html_url);
+        }
+      } else {
+        setUpdateStatus('upToDate');
+      }
+    } catch (e) {
+      setUpdateStatus('error');
+    }
+  };
+
+  const startUpdate = async () => {
+    if (!updateUrl) return;
+    setUpdateStatus('downloading');
+    setDownloadPercent(0);
+    try {
+      const response = await fetch(updateUrl);
+      if (!response.ok) throw new Error('Erro ao baixar');
+      const reader = response.body.getReader();
+      const contentLength = +response.headers.get('Content-Length') || 0;
+      let receivedLength = 0;
+      let isFirstChunk = true;
+      
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        receivedLength += value.length;
+        if (contentLength) {
+          setDownloadPercent(Math.round((receivedLength / contentLength) * 100));
+        }
+        await window.api.writeUpdateChunk(Array.from(value), isFirstChunk);
+        isFirstChunk = false;
+      }
+      
+      setUpdateStatus('readyToRestart');
+      await window.api.executeUpdate();
+    } catch (err) {
+      setUpdateStatus('error');
+      console.error(err);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'sobre') {
+      checkUpdates();
+    }
+  }, [activeTab]);
 
   useEffect(() => {
     const loadSettings = async () => {
@@ -64,21 +150,33 @@ function Settings() {
   };
 
   const resetDefaults = async () => {
-    if (window.confirm('Tem certeza que deseja restaurar todas as configurações para o padrão?')) {
-      await window.api.resetSettings();
-      const s = await window.api.getSettings();
-      setSettings(s);
-      setLocalSettings(s);
-    }
+    setConfirmConfig({
+      isOpen: true,
+      message: "Tem certeza que deseja restaurar todas as configurações para o padrão?",
+      onConfirm: async () => {
+        await window.api.resetSettings();
+        const s = await window.api.getSettings();
+        setSettings(s);
+        setLocalSettings(s);
+        setConfirmConfig({ isOpen: false, message: '', onConfirm: null });
+      },
+      onCancel: () => setConfirmConfig({ isOpen: false, message: '', onConfirm: null })
+    });
   };
 
   const handleResetTab = async (tabName) => {
-    if (window.confirm('Tem certeza que deseja restaurar as configurações desta aba para o padrão?')) {
-      await window.api.resetSettingsTab(tabName);
-      const s = await window.api.getSettings();
-      setSettings(s);
-      setLocalSettings(s);
-    }
+    setConfirmConfig({
+      isOpen: true,
+      message: "Tem certeza que deseja restaurar as configurações desta aba para o padrão?",
+      onConfirm: async () => {
+        await window.api.resetSettingsTab(tabName);
+        const s = await window.api.getSettings();
+        setSettings(s);
+        setLocalSettings(s);
+        setConfirmConfig({ isOpen: false, message: '', onConfirm: null });
+      },
+      onCancel: () => setConfirmConfig({ isOpen: false, message: '', onConfirm: null })
+    });
   };
 
   return (
@@ -114,6 +212,11 @@ function Settings() {
             className={`tab ${activeTab === 'posicao' ? 'active' : ''}`}
             onClick={() => setActiveTab('posicao')}
           ><Move size={14} /> Posicionamento</button>
+
+          <button 
+            className={`tab ${activeTab === 'sobre' ? 'active' : ''}`}
+            onClick={() => setActiveTab('sobre')}
+          ><Info size={14} /> Sobre</button>
         </div>
 
         {/* TAB CONTENT */}
@@ -493,6 +596,107 @@ function Settings() {
             </div>
           )}
 
+          {/* ABA SOBRE */}
+          {activeTab === 'sobre' && (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px', padding: '10px 0' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                <img 
+                  src="./logo-desk.png" 
+                  alt="DeskWidget Logo" 
+                  style={{ height: '56px', width: 'auto', objectFit: 'contain', marginBottom: '8px' }}
+                  onError={(e) => {
+                    e.target.src = './logo-desk-light.png';
+                  }}
+                />
+                <h2 style={{ fontSize: '1.4rem', fontWeight: 700, letterSpacing: '-0.02em', margin: 0 }}>DeskWidget</h2>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 500 }}>Versão {CURRENT_VERSION}</span>
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Desenvolvido por <strong style={{ color: 'var(--text-main)' }}>CoutoApps</strong></span>
+              </div>
+
+              <div className="settings-section" style={{ width: '100%', borderBottom: 'none', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '10px', padding: '20px', marginTop: '10px' }}>
+                <h3 style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--primary)', marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <RefreshCw size={14} className={updateStatus === 'checking' ? 'spin' : ''} style={{ animation: updateStatus === 'checking' ? 'spin 1s linear infinite' : 'none' }} />
+                  <span>ATUALIZAÇÃO DE SOFTWARE</span>
+                </h3>
+                
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-main)', display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                  {updateStatus === 'checking' && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--text-muted)' }}>
+                      <span>Verificando novas versões...</span>
+                    </div>
+                  )}
+
+                  {updateStatus === 'upToDate' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <span style={{ fontWeight: 600, color: 'var(--success)' }}>✓ O DeskWidget está atualizado!</span>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Você já está utilizando a versão mais recente.</span>
+                      <button className="btn-secondary" style={{ width: 'auto', padding: '6px 12px', fontSize: '0.75rem', marginTop: '8px', alignSelf: 'flex-start' }} onClick={checkUpdates}>
+                        Verificar novamente
+                      </button>
+                    </div>
+                  )}
+
+                  {updateStatus === 'available' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      <span style={{ fontWeight: 600, color: 'var(--primary)' }}>⚡ Nova versão disponível: v{updateVersion}</span>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', lineHeight: 1.4 }}>
+                        Uma nova versão cheia de melhorias foi encontrada no GitHub Releases. Clique no botão abaixo para baixar e instalar silenciosamente em segundo plano.
+                      </span>
+                      <div style={{ display: 'flex', gap: '8px', marginTop: '5px' }}>
+                        <button className="btn-primary" style={{ width: 'auto', padding: '8px 16px', fontSize: '0.78rem' }} onClick={startUpdate}>
+                          Atualizar agora
+                        </button>
+                        <button className="btn-secondary" style={{ width: 'auto', padding: '8px 16px', fontSize: '0.78rem' }} onClick={checkUpdates}>
+                          Verificar novamente
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {updateStatus === 'downloading' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      <span style={{ fontWeight: 600, color: 'var(--primary)' }}>Baixando atualização: {downloadPercent}%</span>
+                      <div className="update-progress-bar-container" style={{ margin: 0, height: '4px' }}>
+                        <div className="update-progress-bar-fill" style={{ width: `${downloadPercent}%` }} />
+                      </div>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                        O instalador está sendo baixado em segundo plano de forma silenciosa. Por favor, aguarde.
+                      </span>
+                    </div>
+                  )}
+
+                  {updateStatus === 'readyToRestart' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <span style={{ fontWeight: 600, color: 'var(--success)' }}>Pronto para reiniciar!</span>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                        A atualização foi baixada e está pronta. O aplicativo reiniciará automaticamente para aplicar.
+                      </span>
+                    </div>
+                  )}
+
+                  {updateStatus === 'error' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <span style={{ fontWeight: 600, color: 'var(--danger)' }}>⚠️ Falha ao verificar atualizações</span>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                        Não foi possível conectar ao servidor do GitHub. Verifique sua conexão com a internet.
+                      </span>
+                      <button className="btn-secondary" style={{ width: 'auto', padding: '6px 12px', fontSize: '0.75rem', marginTop: '8px', alignSelf: 'flex-start' }} onClick={checkUpdates}>
+                        Tentar novamente
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+              
+              <style>{`
+                @keyframes spin {
+                  from { transform: rotate(0deg); }
+                  to { transform: rotate(360deg); }
+                }
+              `}</style>
+            </div>
+          )}
+
         </div>
       </div>
 
@@ -501,6 +705,12 @@ function Settings() {
         <button className="btn-secondary" onClick={close}>Cancelar</button>
         <button className="btn-primary" style={{ width: 'auto', padding: '10px 20px' }} onClick={handleSave}>Salvar</button>
       </div>
+      <CustomConfirm
+        isOpen={confirmConfig.isOpen}
+        message={confirmConfig.message}
+        onConfirm={confirmConfig.onConfirm}
+        onCancel={confirmConfig.onCancel}
+      />
     </div>
   );
 }

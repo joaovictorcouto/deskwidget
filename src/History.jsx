@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Calendar, History as HistoryIcon, BellRing, PauseCircle, CheckCircle, XCircle, Trash2, Edit2, PlayCircle, Clock } from 'lucide-react';
+import CustomConfirm from './components/CustomConfirm';
 
 function History() {
   const [activeTab, setActiveTab] = useState('agendados'); // 'agendados' or 'historico'
@@ -11,6 +12,9 @@ function History() {
   const [editTitle, setEditTitle] = React.useState('');
   const [editDate, setEditDate] = React.useState('');
   const [editTime, setEditTime] = React.useState('');
+
+  // Estados para CustomConfirm
+  const [confirmConfig, setConfirmConfig] = useState({ isOpen: false, message: '', onConfirm: null });
 
   const loadData = async () => {
     if (window.api) {
@@ -36,10 +40,18 @@ function History() {
   }, []);
 
   const clearHistory = async () => {
-    if (window.api) {
-      await window.api.clearHistory();
-      loadData();
-    }
+    setConfirmConfig({
+      isOpen: true,
+      message: "Deseja realmente limpar todo o histórico de lembretes?",
+      onConfirm: async () => {
+        if (window.api) {
+          await window.api.clearHistory();
+          loadData();
+        }
+        setConfirmConfig({ isOpen: false, message: '', onConfirm: null });
+      },
+      onCancel: () => setConfirmConfig({ isOpen: false, message: '', onConfirm: null })
+    });
   };
 
   const close = () => window.api?.closeWindow();
@@ -55,7 +67,7 @@ function History() {
     setEditingId(r.id);
     setEditTitle(r.title);
     const d = new Date(r.datetime);
-    setEditDate(d.toISOString().split('T')[0]);
+    setEditDate(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
     setEditTime(`${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`);
   };
 
@@ -73,11 +85,18 @@ function History() {
   };
 
   const deleteRem = async (id) => {
-    if (window.confirm("Deseja realmente excluir este lembrete?")) {
-      if (!window.api) return;
-      await window.api.deleteReminder(id);
-      loadData();
-    }
+    setConfirmConfig({
+      isOpen: true,
+      message: "Deseja realmente excluir este lembrete?",
+      onConfirm: async () => {
+        if (window.api) {
+          await window.api.deleteReminder(id);
+          loadData();
+        }
+        setConfirmConfig({ isOpen: false, message: '', onConfirm: null });
+      },
+      onCancel: () => setConfirmConfig({ isOpen: false, message: '', onConfirm: null })
+    });
   };
 
   const saveClone = async () => {
@@ -96,10 +115,37 @@ function History() {
     loadData();
   };
 
+  const saveReschedule = async () => {
+    if (!window.api) return;
+    const dt = new Date(`${editDate}T${editTime}`);
+    if (dt < new Date()) {
+      setHistoryError('Não é possível agendar um lembrete no passado.');
+      return;
+    }
+    // 1. Atualiza título e data/hora do lembrete original
+    await window.api.updateReminderFull(editingId, editTitle, dt.toISOString());
+    // 2. Muda o status de volta para 'agendado' para que volte a ficar ativo!
+    await window.api.updateReminder(editingId, 'agendado', null);
+    
+    setEditingId(null);
+    setHistoryError('');
+    loadData();
+  };
+
+  // Clonar lembrete passado/histórico: usa data e hora atuais
   const startClone = (r) => {
     setCloningId(r.id);
     setEditTitle(r.title);
     const d = new Date();
+    setEditDate(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
+    setEditTime(`${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`);
+  };
+
+  // Clonar lembrete futuro/agendado: mantém data e hora originais
+  const startCloneFuture = (r) => {
+    setCloningId(r.id);
+    setEditTitle(r.title);
+    const d = new Date(r.datetime);
     setEditDate(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
     setEditTime(`${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`);
   };
@@ -188,7 +234,7 @@ function History() {
                       <button className="icon-btn" onClick={() => startEdit(r)} title="Editar">
                         <Edit2 size={16} />
                       </button>
-                      <button className="icon-btn" onClick={() => startClone(r)} title="Clonar">
+                      <button className="icon-btn" onClick={() => startCloneFuture(r)} title="Clonar">
                         <Clock size={16} />
                       </button>
                       <button className="icon-btn" onClick={() => deleteRem(r.id)} style={{ color: 'var(--danger)' }} title="Excluir">
@@ -207,7 +253,7 @@ function History() {
                 <div style={{ marginTop: '10px' }}>
                   {falhas.map(r => (
                     <div key={r.id} className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', border: '1px solid rgba(255, 107, 107, 0.3)' }}>
-                      {cloningId === r.id ? (
+                      {editingId === r.id ? (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%', padding: '10px 0' }}>
                           <input type="text" className="form-control" value={editTitle} onChange={e => { setEditTitle(e.target.value); setHistoryError(''); }} />
                           <div style={{ display: 'flex', gap: '10px' }}>
@@ -220,8 +266,8 @@ function History() {
                             </div>
                           )}
                           <div style={{ display: 'flex', gap: '10px' }}>
-                            <button className="btn-primary" onClick={saveClone} style={{ flex: 1, padding: '8px' }}>Clonar</button>
-                            <button className="btn-secondary" onClick={() => { setCloningId(null); setHistoryError(''); }} style={{ flex: 1, padding: '8px' }}>Cancelar</button>
+                            <button className="btn-primary" onClick={saveReschedule} style={{ flex: 1, padding: '8px' }}>Reagendar</button>
+                            <button className="btn-secondary" onClick={() => { setEditingId(null); setHistoryError(''); }} style={{ flex: 1, padding: '8px' }}>Cancelar</button>
                           </div>
                         </div>
                       ) : (
@@ -234,7 +280,7 @@ function History() {
                             <p style={{ color: 'var(--danger)' }}>Perdido: {new Date(r.datetime).toLocaleString()}</p>
                           </div>
                           <div style={{ display: 'flex', gap: '5px' }}>
-                            <button className="icon-btn" onClick={() => startClone(r)} title="Clonar">
+                            <button className="icon-btn" onClick={() => startEdit(r)} title="Reagendar">
                               <Clock size={16} />
                             </button>
                             <button className="icon-btn" onClick={() => deleteRem(r.id)} style={{ color: 'var(--danger)' }} title="Excluir">
@@ -307,6 +353,12 @@ function History() {
           </div>
         )}
       </div>
+      <CustomConfirm
+        isOpen={confirmConfig.isOpen}
+        message={confirmConfig.message}
+        onConfirm={confirmConfig.onConfirm}
+        onCancel={confirmConfig.onCancel}
+      />
     </div>
   );
 }

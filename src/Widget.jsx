@@ -6,8 +6,9 @@
  * - Puxador: A pequena barra que o usuário clica e arrasta para mover a posição vertical.
  */
 import React, { useState, useEffect, useRef } from 'react';
-import { Settings, Plus, CheckCircle, Bell, ChevronDown, ChevronRight, GripVertical, Clock, Tag, X, Sun, Moon } from 'lucide-react';
+import { Settings, Plus, CheckCircle, Bell, ChevronDown, ChevronRight, GripVertical, Clock, Tag, X, Sun, Moon, ArrowUp, Download } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
+import CustomConfirm from './components/CustomConfirm';
 
 function Widget() {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -38,6 +39,120 @@ function Widget() {
   const [editingTagValue, setEditingTagValue] = useState('');
   const [taskSortOrder, setTaskSortOrder] = useState('custom');
   const tagMenuRef = useRef(null);
+
+  // Estado para CustomConfirm
+  const [confirmConfig, setConfirmConfig] = useState({ isOpen: false, message: '', onConfirm: null });
+
+  // Estados de Atualização (Updater)
+  const CURRENT_VERSION = '1.1.1';
+  const [updateAvailable, setUpdateAvailable] = useState(false);
+  const [updateVersion, setUpdateVersion] = useState('');
+  const [updateUrl, setUpdateUrl] = useState('');
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadPercent, setDownloadPercent] = useState(0);
+  const [readyToRestart, setReadyToRestart] = useState(false);
+  const [showUpdatePanel, setShowUpdatePanel] = useState(false);
+  const [ignoredVersion, setIgnoredVersion] = useState(localStorage.getItem('deskwidget_ignored_version') || '');
+
+  const compareVersions = (v1, v2) => {
+    const parts1 = v1.split('.').map(Number);
+    const parts2 = v2.split('.').map(Number);
+    for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
+      const p1 = parts1[i] || 0;
+      const p2 = parts2[i] || 0;
+      if (p1 > p2) return 1;
+      if (p1 < p2) return -1;
+    }
+    return 0;
+  };
+
+  const checkUpdates = async (silent = true) => {
+    try {
+      const response = await fetch('https://api.github.com/repos/CoutoApps/DeskWidget/releases/latest');
+      if (!response.ok) return;
+      const data = await response.json();
+      const latestVer = data.tag_name.replace('v', '');
+      
+      const isNewer = compareVersions(latestVer, CURRENT_VERSION) > 0;
+      if (isNewer) {
+        setUpdateVersion(latestVer);
+        setUpdateAvailable(true);
+        
+        const exeAsset = data.assets.find(asset => asset.name.endsWith('.exe') || asset.name.includes('setup'));
+        if (exeAsset) {
+          setUpdateUrl(exeAsset.browser_download_url);
+        } else {
+          setUpdateUrl(data.assets[0]?.browser_download_url || data.html_url);
+        }
+        
+        const ignored = localStorage.getItem('deskwidget_ignored_version') || '';
+        if (latestVer !== ignored) {
+          if (!silent) {
+            setShowUpdatePanel(true);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Erro ao verificar atualizações:', err);
+    }
+  };
+
+  const startUpdate = async () => {
+    if (!updateUrl) return;
+    setIsDownloading(true);
+    setDownloadPercent(0);
+    try {
+      const response = await fetch(updateUrl);
+      if (!response.ok) throw new Error('Falha no download da atualização');
+      const reader = response.body.getReader();
+      const contentLength = +response.headers.get('Content-Length') || 0;
+      let receivedLength = 0;
+      let isFirstChunk = true;
+      
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        receivedLength += value.length;
+        if (contentLength) {
+          setDownloadPercent(Math.round((receivedLength / contentLength) * 100));
+        }
+        
+        await window.api.writeUpdateChunk(Array.from(value), isFirstChunk);
+        isFirstChunk = false;
+      }
+      
+      setReadyToRestart(true);
+      setIsDownloading(false);
+      await window.api.executeUpdate();
+    } catch (err) {
+      console.error(err);
+      setIsDownloading(false);
+      alert('Erro ao baixar atualização: ' + err.message);
+    }
+  };
+
+  const ignoreUpdate = () => {
+    localStorage.setItem('deskwidget_ignored_version', updateVersion);
+    setIgnoredVersion(updateVersion);
+    setShowUpdatePanel(false);
+  };
+
+  const scheduleUpdate = () => {
+    if (window.api) {
+      window.api.showPopup({ 
+        type: 'schedule-update', 
+        id: 'schedule-update', 
+        data: { version: updateVersion },
+        height: 210 
+      });
+    }
+    setShowUpdatePanel(false);
+  };
+
+  useEffect(() => {
+    // Checagem silenciosa ao inicializar
+    checkUpdates(true);
+  }, []);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -308,7 +423,17 @@ function Widget() {
       for (const rem of r) {
           if (rem.status === 'agendado') {
               const remDate = new Date(rem.datetime);
+              if (now < remDate) {
+                  shownRemindersRef.current.delete(rem.id);
+              }
               if (now >= remDate) {
+                  // Se for o lembrete de atualização agendada, roda silenciosamente!
+                  if (rem.title === '🔄 Atualização Automática Agendada') {
+                      await window.api.updateReminder(rem.id, 'concluido');
+                      startUpdate();
+                      changed = true;
+                      continue;
+                  }
                   // Se passou do horário em até 5 minutos, exibe o popup
                   if ((now - remDate) < 5 * 60000) {
                       if (!shownRemindersRef.current.has(rem.id)) {
@@ -459,16 +584,22 @@ function Widget() {
   };
 
   const handleDeleteTag = async (tagName) => {
-    if (window.confirm("Ao excluir esta etiqueta, todas as tarefas vinculadas ficarão sem etiqueta.")) {
-      const newTags = savedTags.filter(t => t.name !== tagName);
-      setSavedTags(newTags);
-      if (window.api) {
-        window.api.updateSetting('savedTags', JSON.stringify(newTags));
-        await window.api.updateTaskTag(tagName, null, null);
-        loadData();
-      }
-      if (selectedTag === tagName) setSelectedTag('');
-    }
+    setConfirmConfig({
+      isOpen: true,
+      message: "Ao excluir esta etiqueta, todas as tarefas vinculadas ficarão sem etiqueta.",
+      onConfirm: async () => {
+        const newTags = savedTags.filter(t => t.name !== tagName);
+        setSavedTags(newTags);
+        if (window.api) {
+          window.api.updateSetting('savedTags', JSON.stringify(newTags));
+          await window.api.updateTaskTag(tagName, null, null);
+          loadData();
+        }
+        if (selectedTag === tagName) setSelectedTag('');
+        setConfirmConfig({ isOpen: false, message: '', onConfirm: null });
+      },
+      onCancel: () => setConfirmConfig({ isOpen: false, message: '', onConfirm: null })
+    });
   };
 
   const handleSaveTagEdit = async () => {
@@ -681,8 +812,12 @@ function Widget() {
 
         {settings.enablePomodoro === 'true' && (
           <div style={{ padding: '15px', borderBottom: '1px solid var(--border)', display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative' }}>
-            <div style={{ position: 'absolute', top: '10px', left: '15px', fontSize: '0.75rem', fontWeight: 700, letterSpacing: '1px', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '5px' }}>
-              <Clock size={12} /> POMODORO
+            <div style={{ position: 'absolute', top: '10px', left: '15px', fontSize: '0.72rem', fontWeight: 600, letterSpacing: '1px', color: '#ff6b6b', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                <path d="M12 2c-.5 2.5-2.5 3.5-4 4M12 2c.5 2.5 2.5 3.5 4 4M12 2v5" />
+                <path d="M12 7c-4.5 0-8 3-8 7.5S7.5 22 12 22s8-3 8-7.5S16.5 7 12 7z" />
+              </svg>
+              <span>POMODORO</span>
             </div>
             <div style={{ fontSize: '2.2rem', fontWeight: 'bold', fontFamily: 'monospace', color: pomodoroStatus === 'break' ? 'var(--success)' : 'var(--primary)', marginTop: '10px' }}>
               {pomodoroStatus === 'idle' ? `${String(settings.pomodoroFocus || 25).padStart(2, '0')}:00` : formatPomodoroTime(pomodoroTimeLeft)}
@@ -708,7 +843,10 @@ function Widget() {
         {showTasks && (
         <div className="half-section">
           <div className="fixed-half-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{color: '#e0c0aa'}}>📋 TAREFAS</span>
+            <span style={{ fontSize: '0.72rem', fontWeight: 600, letterSpacing: '1px', color: '#4ade80', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <CheckCircle size={12} style={{ flexShrink: 0 }} />
+              <span>TAREFAS</span>
+            </span>
             <select 
                style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', fontSize: '0.7rem', outline: 'none', cursor: 'pointer' }}
                value={taskSortOrder}
@@ -944,7 +1082,10 @@ function Widget() {
         {showReminders && (
         <div className="half-section">
           <div className="fixed-half-header">
-            <span style={{color: '#ffd166'}}>🔔 LEMBRETES</span>
+            <span style={{ fontSize: '0.72rem', fontWeight: 600, letterSpacing: '1px', color: '#ffb84d', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Bell size={12} style={{ flexShrink: 0 }} />
+              <span>LEMBRETES</span>
+            </span>
             <div style={{ display: 'flex', gap: '8px' }}>
               <a className="section-title-action" onClick={openHistory}>Ver Todos</a>
             </div>
@@ -1035,7 +1176,13 @@ function Widget() {
         {settings.enableNotes === 'true' && (
           <div className="half-section" style={{ flex: 'none', height: '180px' }}>
             <div className="fixed-half-header">
-              <span style={{color: '#8ab4f8'}}>📝 NOTAS RÁPIDAS</span>
+              <span style={{ fontSize: '0.72rem', fontWeight: 600, letterSpacing: '1px', color: '#a78bfa', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                  <path d="M12 20h9" />
+                  <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                </svg>
+                <span>NOTAS RÁPIDAS</span>
+              </span>
             </div>
             <div className="scrollable-content" style={{ paddingBottom: '10px' }}>
               <textarea 
@@ -1052,27 +1199,70 @@ function Widget() {
           </div>
         )}
 
-        <div className="footer" style={{ padding: '10px 20px', fontSize: '0.65rem', color: 'var(--text-muted)', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', whiteSpace: 'nowrap', overflow: 'hidden' }}>
-          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', display: 'flex', gap: '15px' }}>
-            <span>📝 {todaysCompletedCount}/{todaysTasks.length} concluídas hoje</span>
-            <span>🔔 {reminders.filter(r => (r.status === 'agendado' && new Date(r.datetime) >= new Date()) || r.status === 'pausado').length} agendados</span>
-            {reminders.some(r => r.status === 'perdido' || (r.status === 'agendado' && new Date(r.datetime) < new Date())) && (
-              <span 
-                className="pulse-error" 
-                style={{ color: 'var(--danger)', cursor: 'pointer', fontWeight: 'bold' }}
-                onClick={openHistory}
-              >
-                ⚠️ {reminders.filter(r => r.status === 'perdido' || (r.status === 'agendado' && new Date(r.datetime) < new Date())).length} com Erro
-              </span>
+        {showUpdatePanel ? (
+          <div className="updater-footer-panel">
+            <div className="updater-actions">
+              {isDownloading ? (
+                <span style={{ fontSize: '0.65rem', fontWeight: 600, color: 'var(--primary)' }}>
+                  {readyToRestart ? 'Aplicando atualização...' : `Baixando atualização: ${downloadPercent}%`}
+                </span>
+              ) : (
+                <>
+                  <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>Versão {updateVersion} disponível</span>
+                  <div style={{ display: 'flex', gap: '5px' }}>
+                    <button className="updater-btn update" onClick={startUpdate}>
+                      Atualizar
+                    </button>
+                    <button className="updater-btn ignore" onClick={ignoreUpdate}>
+                      Ignorar
+                    </button>
+                    <button className="updater-btn schedule" onClick={scheduleUpdate}>
+                      Agendar
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+            {isDownloading && (
+              <div className="update-progress-bar-container">
+                <div className="update-progress-bar-fill" style={{ width: `${downloadPercent}%` }} />
+              </div>
             )}
-          </span>
-          <div style={{ display: 'flex', gap: '4px', flexShrink: 0, marginLeft: '10px', alignItems: 'center' }}>
-            <span style={{width: '6px', height: '6px', borderRadius: '50%', backgroundColor: 'var(--success)', display: 'inline-block'}}></span>
-            <span style={{width: '6px', height: '6px', borderRadius: '50%', backgroundColor: 'var(--primary)', display: 'inline-block'}}></span>
           </div>
-        </div>
+        ) : (
+          <div className="footer" style={{ padding: '6px 12px', fontSize: '0.6rem', color: 'var(--text-muted)', borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px', flexWrap: 'wrap', minHeight: '28px' }}>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <span>📝 {todaysCompletedCount}/{todaysTasks.length} concluídas</span>
+              <span>🔔 {reminders.filter(r => (r.status === 'agendado' && new Date(r.datetime) >= new Date()) || r.status === 'pausado').length} agendados</span>
+              {reminders.some(r => r.status === 'perdido' || (r.status === 'agendado' && new Date(r.datetime) < new Date())) && (
+                <span 
+                  className="pulse-error" 
+                  style={{ color: 'var(--danger)', cursor: 'pointer', fontWeight: 'bold' }}
+                  onClick={openHistory}
+                >
+                  ⚠️ {reminders.filter(r => r.status === 'perdido' || (r.status === 'agendado' && new Date(r.datetime) < new Date())).length} falhas
+                </span>
+              )}
+            </div>
+            {updateAvailable && (
+              <button 
+                className="glow-button" 
+                onClick={() => setShowUpdatePanel(true)} 
+                title={`Atualização v${updateVersion} disponível`}
+              >
+                <ArrowUp size={12} />
+              </button>
+            )}
+          </div>
+        )}
         </div>
       )}
+      <CustomConfirm
+        isOpen={confirmConfig.isOpen}
+        message={confirmConfig.message}
+        onConfirm={confirmConfig.onConfirm}
+        onCancel={confirmConfig.onCancel}
+      />
     </div>
   );
 }

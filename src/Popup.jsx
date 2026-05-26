@@ -82,9 +82,7 @@ function ReminderPopup({ config }) {
   const handleSnooze = async (minutes) => {
     const d = new Date();
     d.setMinutes(d.getMinutes() + minutes);
-    const pad = (n) => String(n).padStart(2, '0');
-    const dt = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-    await window.api?.updateReminder(reminder.id, 'agendado', dt);
+    await window.api?.updateReminder(reminder.id, 'agendado', d.toISOString());
     window.api?.closeWindow();
   };
 
@@ -330,9 +328,135 @@ function Popup() {
 
   const configWithProgress = { ...config, progressBar: config.autoClose ? progress : undefined };
 
+// ─── Popup de Agendamento de Atualização ──────────────────────────────────────
+function ScheduleUpdatePopup({ config }) {
+  const [date, setDate] = useState('');
+  const [time, setTime] = useState('');
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    setDate(`${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`);
+    setTime(`${pad(now.getHours())}:${pad(now.getMinutes())}`);
+  }, []);
+
+  const handleSchedule = async () => {
+    if (!date || !time) {
+      setError('Selecione data e hora');
+      return;
+    }
+    const dt = new Date(`${date}T${time}`);
+    if (dt < new Date()) {
+      setError('Selecione uma hora futura');
+      return;
+    }
+    
+    if (window.api) {
+      await window.api.addReminder(
+        '🔄 Atualização Automática Agendada',
+        dt.toISOString(),
+        'none'
+      );
+      await window.api.updateSetting('scheduled_update_version', config.data.version);
+      await window.api.updateSetting('scheduled_update_time', dt.toISOString());
+    }
+    
+    window.api?.closeWindow();
+  };
+
+  return (
+    <PopupShell label="AGENDAR ATUALIZAÇÃO" labelIcon={<Clock size={13} />}>
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', justifyContent: 'space-between' }}>
+        <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: '0 0 8px 0', lineHeight: 1.3 }}>
+          Escolha quando deseja instalar a versão {config.data.version}. O app será atualizado automaticamente nesta data.
+        </p>
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+          <div style={{ flex: 1 }}>
+            <label className="form-label" style={{ fontSize: '0.6rem' }}>DATA</label>
+            <input 
+              type="date" 
+              className="form-control" 
+              style={{ padding: '6px', fontSize: '0.75rem', height: '32px' }}
+              value={date} 
+              onChange={e => setDate(e.target.value)} 
+            />
+          </div>
+          <div style={{ flex: 1 }}>
+            <label className="form-label" style={{ fontSize: '0.6rem' }}>HORA</label>
+            <input 
+              type="time" 
+              className="form-control" 
+              style={{ padding: '6px', fontSize: '0.75rem', height: '32px' }}
+              value={time} 
+              onChange={e => setTime(e.target.value)} 
+            />
+          </div>
+        </div>
+        {error && <div style={{ color: 'var(--danger)', fontSize: '0.65rem', marginBottom: '6px' }}>⚠️ {error}</div>}
+        <button className="btn-primary" style={{ padding: '8px' }} onClick={handleSchedule}>
+          Agendar Atualização
+        </button>
+      </div>
+    </PopupShell>
+  );
+}
+
+// ─── Roteador de popups ───────────────────────────────────────────────────────
+function Popup() {
+  const [config, setConfig] = useState(null);
+  const [progress, setProgress] = useState(100);
+
+  useEffect(() => {
+    let timer;
+    try {
+      const hash = window.location.hash;
+      if (hash.includes('?config=')) {
+        const data = JSON.parse(decodeURIComponent(hash.split('?config=')[1]));
+        setConfig(data);
+
+        // Som de notificação
+        if ((data.type === 'reminder' || data.type === 'pomodoro') && window.api) {
+          window.api.getSettings().then(s => {
+            if (s.soundEnabled !== 'false' && s.soundEnabled !== false) {
+              const vol = s.soundVolume ? parseInt(s.soundVolume) / 100 : 0.8;
+              const type = data.type === 'pomodoro' ? (s.pomodoroSound || 'duplo') : (s.soundType || 'duplo');
+              playNotificationSound(vol, type);
+            }
+          });
+        }
+        
+        // Progress bar and auto-close logic is global now
+        if (data.autoClose) {
+          const duration = data.autoClose;
+          let current = duration;
+          timer = setInterval(() => {
+            current -= 50;
+            setProgress(Math.max(0, (current / duration) * 100));
+            if (current <= 0) { clearInterval(timer); window.api?.closeWindow(); }
+          }, 50);
+        }
+      }
+    } catch (e) {
+      console.error('Failed to parse popup config', e);
+    }
+
+    const onKey = (e) => { if (e.key === 'Escape') window.api?.closeWindow(); };
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      if (timer) clearInterval(timer);
+    };
+  }, []);
+
+  if (!config) return <div style={{ padding: '20px', color: 'var(--text-muted)', fontSize: '0.8rem' }}>Carregando...</div>;
+
+  const configWithProgress = { ...config, progressBar: config.autoClose ? progress : undefined };
+
   if (config.type === 'reminder')   return <ReminderPopup config={configWithProgress} />;
   if (config.type === 'pomodoro')   return <PomodoroPopup config={configWithProgress} />;
   if (config.type === 'positioner') return <PositionerPopup />;
+  if (config.type === 'schedule-update') return <ScheduleUpdatePopup config={configWithProgress} />;
 
   return null;
 }

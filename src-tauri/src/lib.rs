@@ -19,7 +19,7 @@ pub fn run() {
         }))
         .plugin(
             tauri_plugin_autostart::Builder::new()
-                .app_name("Desk Widget")
+                .app_name("DeskWidget")
                 .args(["--minimized"])
                 .build()
         )
@@ -134,6 +134,8 @@ pub fn run() {
             set_positioner_margins,
             save_popup_position,
             preview_appearance,
+            write_update_chunk,
+            execute_update,
         ]);
 
     builder
@@ -584,4 +586,32 @@ fn pomodoro_action(action: String, app: tauri::AppHandle) {
 #[tauri::command]
 fn preview_appearance(settings: serde_json::Value, app: tauri::AppHandle) {
     let _ = app.emit("preview-appearance", settings);
+}
+
+#[tauri::command]
+fn write_update_chunk(chunk: Vec<u8>, is_start: bool) -> Result<(), String> {
+    use std::fs::OpenOptions;
+    use std::io::Write;
+    let temp_path = std::env::temp_dir().join("DeskWidget_Setup.exe");
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(is_start)
+        .append(!is_start)
+        .open(temp_path)
+        .map_err(|e| e.to_string())?;
+        
+    file.write_all(&chunk).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn execute_update(app: tauri::AppHandle) -> Result<(), String> {
+    let temp_path = std::env::temp_dir().join("DeskWidget_Setup.exe");
+    std::process::Command::new(temp_path)
+        .args(&["/S"])
+        .spawn()
+        .map_err(|e| e.to_string())?;
+    app.exit(0);
+    Ok(())
 }

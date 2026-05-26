@@ -42,6 +42,8 @@ window.api = {
   expandWindow: () => invoke('expand_window', { availX: window.screen.availLeft || 0, availY: window.screen.availTop || 0, availWidth: window.screen.availWidth, availHeight: window.screen.availHeight }),
   collapseWindow: () => invoke('collapse_window', { availX: window.screen.availLeft || 0, availY: window.screen.availTop || 0, availWidth: window.screen.availWidth, availHeight: window.screen.availHeight }),
   previewEdge: (tempEdge) => invoke('preview_edge', { tempEdge, availX: window.screen.availLeft || 0, availY: window.screen.availTop || 0, availWidth: window.screen.availWidth, availHeight: window.screen.availHeight }),
+  writeUpdateChunk: (chunk, isStart) => invoke('write_update_chunk', { chunk, isStart }),
+  executeUpdate: () => invoke('execute_update'),
   
   // Event Listeners simulados (ainda precisam do backend emitindo)
   onSettingsUpdated: (cb) => { const u = listen('settings-updated', cb); return () => u.then(f => f()); },
