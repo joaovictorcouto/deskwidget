@@ -34,6 +34,10 @@ function Settings() {
     setUpdateStatus('checking');
     try {
       const response = await fetch('https://api.github.com/repos/joaovictorcouto/deskwidget/releases/latest');
+      if (response.status === 404) {
+        setUpdateStatus('upToDate');
+        return;
+      }
       if (!response.ok) throw new Error('Não foi possível conectar');
       const data = await response.json();
       const latestVer = data.tag_name.replace('v', '');
