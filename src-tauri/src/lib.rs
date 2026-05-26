@@ -36,7 +36,7 @@ pub fn run() {
             let app_handle = app.handle().clone();
 
             // Sincroniza o Auto-Start com o Windows na inicializacao
-            let autostart_manager = app.autostart();
+            let autostart_manager = app.handle().autolaunch();
             let mut start_on_windows = true;
             if let Ok(conn) = app.state::<database::AppState>().db.lock() {
                 if let Ok(val) = conn.query_row("SELECT value FROM settings WHERE key = 'startOnWindows'", [], |row| row.get::<_, String>(0)) {

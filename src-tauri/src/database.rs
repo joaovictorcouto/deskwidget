@@ -415,7 +415,7 @@ pub fn update_setting(
         .map_err(|e| e.to_string())?;
 
     if key == "startOnWindows" {
-        let autostart_manager = app.autostart();
+        let autostart_manager = app.autolaunch();
         if value == "true" {
             let _ = autostart_manager.enable();
         } else {
@@ -480,7 +480,7 @@ pub fn reset_settings(app: tauri::AppHandle, state: tauri::State<AppState>) -> R
         let _ = w.center();
     }
     
-    let autostart_manager = app.autostart();
+    let autostart_manager = app.autolaunch();
     let _ = autostart_manager.enable();
 
     let _ = app.emit("settings-updated", ());
@@ -535,7 +535,7 @@ pub fn reset_settings_tab(tab: String, app: tauri::AppHandle, state: tauri::Stat
     }
     
     if tab == "geral" {
-        let autostart_manager = app.autostart();
+        let autostart_manager = app.autolaunch();
         let _ = autostart_manager.enable();
     }
 
