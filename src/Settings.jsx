@@ -11,6 +11,13 @@ function Settings() {
   // Estado para CustomConfirm
   const [confirmConfig, setConfirmConfig] = useState({ isOpen: false, message: '', onConfirm: null });
 
+  // Estados do Feedback Modal (Telegram)
+  const [feedbackModal, setFeedbackModal] = useState({ isOpen: false, type: 'bug' });
+  const [feedbackMessage, setFeedbackMessage] = useState('');
+  const [feedbackSending, setFeedbackSending] = useState(false);
+  const [feedbackSuccess, setFeedbackSuccess] = useState(false);
+  const [feedbackError, setFeedbackError] = useState('');
+
   // Estados do Updater na aba Sobre
   const CURRENT_VERSION = '1.2.3';
   const [updateStatus, setUpdateStatus] = useState('idle');
@@ -163,6 +170,33 @@ function Settings() {
       const updatedSettings = await window.api.getSettings();
       setSettings(updatedSettings);
       setLocalSettings(updatedSettings);
+    }
+  };
+
+  const handleSendFeedback = async () => {
+    if (!feedbackMessage.trim()) {
+      setFeedbackError('Por favor, digite uma mensagem.');
+      return;
+    }
+    setFeedbackSending(true);
+    setFeedbackError('');
+    try {
+      if (window.api?.sendFeedback) {
+        await window.api.sendFeedback(feedbackModal.type, feedbackMessage);
+        setFeedbackSuccess(true);
+        setTimeout(() => {
+          setFeedbackModal({ isOpen: false, type: 'bug' });
+          setFeedbackMessage('');
+          setFeedbackSuccess(false);
+        }, 1500);
+      } else {
+        throw new Error('API do aplicativo indisponível.');
+      }
+    } catch (err) {
+      console.error(err);
+      setFeedbackError(err.message || 'Erro ao enviar. Tente novamente.');
+    } finally {
+      setFeedbackSending(false);
     }
   };
 
@@ -628,6 +662,22 @@ function Settings() {
                 <h2 style={{ fontSize: '1.4rem', fontWeight: 700, letterSpacing: '-0.02em', margin: 0 }}>DeskWidget</h2>
                 <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 500 }}>Versão {CURRENT_VERSION}</span>
                 <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Desenvolvido por <strong style={{ color: 'var(--text-main)' }}>CoutoApps</strong></span>
+                <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+                  <button 
+                    className="btn-secondary" 
+                    style={{ fontSize: '0.75rem', padding: '6px 12px', display: 'flex', alignItems: 'center', gap: '5px' }}
+                    onClick={() => setFeedbackModal({ isOpen: true, type: 'bug' })}
+                  >
+                    🐛 Relatar Bug
+                  </button>
+                  <button 
+                    className="btn-secondary" 
+                    style={{ fontSize: '0.75rem', padding: '6px 12px', display: 'flex', alignItems: 'center', gap: '5px' }}
+                    onClick={() => setFeedbackModal({ isOpen: true, type: 'suggestion' })}
+                  >
+                    💡 Sugerir Melhoria
+                  </button>
+                </div>
               </div>
 
               <div className="settings-section" style={{ width: '100%', borderBottom: 'none', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '10px', padding: '20px', marginTop: '10px' }}>
@@ -730,6 +780,136 @@ function Settings() {
         onConfirm={confirmConfig.onConfirm}
         onCancel={confirmConfig.onCancel}
       />
+      {feedbackModal.isOpen && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100vw',
+          height: '100vh',
+          backgroundColor: 'rgba(0, 0, 0, 0.6)',
+          backdropFilter: 'blur(4px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 99999,
+          padding: '20px',
+          userSelect: 'none'
+        }}>
+          <div className="standalone-window" style={{
+            width: '340px',
+            height: 'auto',
+            minHeight: '260px',
+            borderRadius: '12px',
+            border: '1px solid var(--border)',
+            backgroundColor: 'var(--bg-main)',
+            boxShadow: '0 8px 30px rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+            animation: 'confirmFadeIn 0.2s ease'
+          }}>
+            {/* Header */}
+            <div style={{
+              padding: '10px 14px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              borderBottom: '1px solid var(--border)',
+              fontSize: '0.78rem',
+              fontWeight: 'bold',
+              color: 'var(--text-muted)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+                <span style={{ fontSize: '0.95rem' }}>{feedbackModal.type === 'bug' ? '🐛' : '💡'}</span>
+                <span>{feedbackModal.type === 'bug' ? 'RELATAR BUG' : 'SUGERIR MELHORIA'}</span>
+              </div>
+              <button 
+                onClick={() => setFeedbackModal({ isOpen: false, type: 'bug' })} 
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', alignItems: 'center' }}
+              >
+                <X size={14} />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div style={{ flex: 1, padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {feedbackSuccess ? (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1, gap: '8px', padding: '20px 0' }}>
+                  <span style={{ fontSize: '2rem', color: 'var(--success)' }}>✓</span>
+                  <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: 'var(--success)' }}>Enviado com sucesso!</span>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textAlign: 'center' }}>Muito obrigado pelo seu feedback.</span>
+                </div>
+              ) : (
+                <>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label className="form-label" style={{ fontSize: '0.65rem', marginBottom: '2px' }}>TIPO DE FEEDBACK</label>
+                    <select
+                      className="form-control"
+                      style={{ padding: '6px', fontSize: '0.8rem', height: '32px', cursor: 'pointer', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-main)', borderRadius: '6px' }}
+                      value={feedbackModal.type}
+                      onChange={(e) => setFeedbackModal({ ...feedbackModal, type: e.target.value })}
+                    >
+                      <option value="bug">🐛 Relatar Bug</option>
+                      <option value="suggestion">💡 Sugestão de Melhoria</option>
+                    </select>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label className="form-label" style={{ fontSize: '0.65rem', marginBottom: '2px' }}>MENSAGEM</label>
+                    <textarea
+                      className="form-control"
+                      style={{
+                        fontSize: '0.78rem',
+                        padding: '6px 8px',
+                        backgroundColor: 'rgba(255, 255, 255, 0.03)',
+                        border: '1px solid var(--border)',
+                        color: 'var(--text-main)',
+                        resize: 'none',
+                        borderRadius: '6px',
+                        outline: 'none',
+                        fontFamily: 'inherit',
+                        minHeight: '80px'
+                      }}
+                      placeholder={feedbackModal.type === 'bug' ? "O que aconteceu? Onde ocorreu o erro?" : "Qual é a sua sugestão para melhorar o app?"}
+                      value={feedbackMessage}
+                      onChange={(e) => setFeedbackMessage(e.target.value)}
+                      disabled={feedbackSending}
+                    />
+                  </div>
+
+                  {feedbackError && (
+                    <div style={{ color: 'var(--danger)', fontSize: '0.68rem', textAlign: 'center' }}>
+                      ⚠️ {feedbackError}
+                    </div>
+                  )}
+
+                  <button
+                    className="btn-primary"
+                    style={{
+                      width: '100%',
+                      padding: '8px',
+                      fontSize: '0.8rem',
+                      height: '34px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px',
+                      opacity: feedbackSending ? 0.7 : 1,
+                      cursor: feedbackSending ? 'not-allowed' : 'pointer',
+                      marginTop: '4px'
+                    }}
+                    onClick={handleSendFeedback}
+                    disabled={feedbackSending}
+                  >
+                    {feedbackSending ? 'Enviando...' : 'Enviar Feedback'}
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

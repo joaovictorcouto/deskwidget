@@ -18,6 +18,9 @@ window.api = {
   deleteTask: (id) => invoke('delete_task', { id }),
   updateTaskTag: (oldTag, newTag, newTagColor) => invoke('update_task_tag', { oldTag, newTag, newTagColor }),
   updateSingleTaskTag: (taskId, tag, tagColor) => invoke('update_single_task_tag', { taskId, tag, tagColor }),
+  updateTaskDetails: (id, details) => invoke('update_task_details', { id, details }),
+  sendFeedback: (feedbackType, message) => invoke('send_feedback', { feedbackType, message }),
+  reportJsError: (errorMsg, location) => invoke('report_js_error', { errorMsg, location }),
   reorderTasks: (ids) => invoke('reorder_tasks', { ids }),
   getReminders: () => invoke('get_reminders'),
   addReminder: (title, datetime, recurrence) => invoke('add_reminder', { title, datetime, recurrence }),
@@ -59,8 +62,26 @@ window.api = {
   onPositionerMetrics: (cb) => { const u = listen('positioner-metrics', (ev) => cb(ev.payload)); return () => u.then(f => f()); },
   onUpdateDownloadProgress: (cb) => { const u = listen('update-download-progress', (ev) => cb(ev.payload)); return () => u.then(f => f()); },
   onPopupOpened: (cb) => { const u = listen('popup-opened', (ev) => cb(ev.payload)); return () => u.then(f => f()); },
-  onPopupClosed: (cb) => { const u = listen('popup-closed', (ev) => cb(ev.payload)); return () => u.then(f => f()); },
 };
+
+// Capturador automático de exceções globais do JavaScript
+window.onerror = function (message, source, lineno, colno, error) {
+  const location = `${source || 'desconhecido'}:${lineno || 0}:${colno || 0}`;
+  const errorMsg = error ? error.stack || error.message || String(error) : String(message);
+  if (window.api && window.api.reportJsError) {
+    window.api.reportJsError(errorMsg, location).catch(console.error);
+  }
+  return false;
+};
+
+// Capturador automático de Rejeições de Promises não tratadas
+window.addEventListener('unhandledrejection', function (event) {
+  const errorMsg = event.reason ? event.reason.stack || event.reason.message || String(event.reason) : 'Promise rejeitada sem tratamento';
+  const location = 'Unhandled Promise Rejection';
+  if (window.api && window.api.reportJsError) {
+    window.api.reportJsError(errorMsg, location).catch(console.error);
+  }
+});
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>

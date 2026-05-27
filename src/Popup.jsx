@@ -358,6 +358,122 @@ function ScheduleUpdatePopup({ config }) {
   );
 }
 
+// ─── Popup de Feedback (Bugs e Sugestões) ──────────────────────────────────
+function FeedbackPopup({ config }) {
+  const [feedbackType, setFeedbackType] = useState(config.data?.feedbackType || 'bug');
+  const [message, setMessage] = useState('');
+  const [sending, setSending] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSend = async () => {
+    if (!message.trim()) {
+      setError('Por favor, digite uma mensagem.');
+      return;
+    }
+    setSending(true);
+    setError('');
+    try {
+      if (window.api?.sendFeedback) {
+        await window.api.sendFeedback(feedbackType, message);
+        setSuccess(true);
+        setTimeout(() => {
+          window.api?.closeWindow();
+        }, 1500);
+      } else {
+        throw new Error('Telegram não está configurado.');
+      }
+    } catch (err) {
+      console.error(err);
+      setError(err || 'Erro ao enviar. Tente novamente.');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <PopupShell 
+      label={feedbackType === 'bug' ? '🐛 RELATAR BUG' : '💡 SUGERIR MELHORIA'}
+      labelIcon={feedbackType === 'bug' ? '🐛' : '💡'}
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', justifyContent: 'space-between', gap: '8px' }}>
+        {success ? (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1, gap: '8px' }}>
+            <span style={{ fontSize: '2rem' }}>✓</span>
+            <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: 'var(--success)' }}>Feedback enviado com sucesso!</span>
+            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Muito obrigado pelo seu relato.</span>
+          </div>
+        ) : (
+          <>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label className="form-label" style={{ fontSize: '0.65rem', marginBottom: '2px' }}>TIPO DE FEEDBACK</label>
+              <select
+                className="form-control"
+                style={{ padding: '6px', fontSize: '0.8rem', height: '32px', cursor: 'pointer', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-main)', borderRadius: '6px' }}
+                value={feedbackType}
+                onChange={(e) => setFeedbackType(e.target.value)}
+              >
+                <option value="bug">🐛 Relatar Bug</option>
+                <option value="suggestion">💡 Sugestão de Melhoria</option>
+              </select>
+            </div>
+            
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label className="form-label" style={{ fontSize: '0.65rem', marginBottom: '2px' }}>MENSAGEM</label>
+              <textarea
+                className="form-control"
+                style={{
+                  flex: 1,
+                  fontSize: '0.78rem',
+                  padding: '6px 8px',
+                  backgroundColor: 'rgba(255, 255, 255, 0.03)',
+                  border: '1px solid var(--border)',
+                  color: 'var(--text-main)',
+                  resize: 'none',
+                  borderRadius: '6px',
+                  outline: 'none',
+                  fontFamily: 'inherit',
+                  minHeight: '70px'
+                }}
+                placeholder={feedbackType === 'bug' ? "O que aconteceu? Onde ocorreu o erro?" : "Qual é a sua sugestão para melhorar o app?"}
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                disabled={sending}
+              />
+            </div>
+            
+            {error && (
+              <div style={{ color: 'var(--danger)', fontSize: '0.68rem', textAlign: 'center' }}>
+                ⚠️ {error}
+              </div>
+            )}
+            
+            <button
+              className="btn-primary"
+              style={{
+                width: '100%',
+                padding: '8px',
+                fontSize: '0.8rem',
+                height: '34px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                opacity: sending ? 0.7 : 1,
+                cursor: sending ? 'not-allowed' : 'pointer'
+              }}
+              onClick={handleSend}
+              disabled={sending}
+            >
+              {sending ? 'Enviando...' : 'Enviar Feedback'}
+            </button>
+          </>
+        )}
+      </div>
+    </PopupShell>
+  );
+}
+
 // ─── Roteador de popups ───────────────────────────────────────────────────────
 function Popup() {
   const [config, setConfig] = useState(null);
@@ -413,6 +529,7 @@ function Popup() {
   if (config.type === 'pomodoro')   return <PomodoroPopup config={configWithProgress} />;
   if (config.type === 'positioner') return <PositionerPopup />;
   if (config.type === 'schedule-update') return <ScheduleUpdatePopup config={configWithProgress} />;
+  if (config.type === 'feedback') return <FeedbackPopup config={configWithProgress} />;
 
   return null;
 }

@@ -30,10 +30,85 @@ pub fn run() {
 
             let conn =
                 database::init_db(db_path.to_str().unwrap(), app.handle()).expect("Falha ao inicializar o banco");
+            let setup_start_time = std::time::Instant::now();
             app.manage(database::AppState {
                 db: std::sync::Mutex::new(conn),
                 active_popups: std::sync::Mutex::new(Vec::new()),
+                start_time: setup_start_time.clone(),
             });
+
+            let panic_app_handle = app.handle().clone();
+            std::panic::set_hook(Box::new(move |panic_info| {
+                let token = "8904259622:AAEe_AK-7t-UILw0EIgklBT4Ba7626J1siE";
+                let chat_id = "8049604881";
+                if token.is_empty() || chat_id.is_empty() {
+                    return;
+                }
+
+                let message = if let Some(s) = panic_info.payload().downcast_ref::<&str>() {
+                    *s
+                } else if let Some(s) = panic_info.payload().downcast_ref::<String>() {
+                    s.as_str()
+                } else {
+                    "Pânico desconhecido (sem mensagem)"
+                };
+
+                let location = if let Some(loc) = panic_info.location() {
+                    format!("Arquivo: {}, Linha: {}, Coluna: {}", loc.file(), loc.line(), loc.column())
+                } else {
+                    "Localização desconhecida".to_string()
+                };
+
+                let url = format!("https://api.telegram.org/bot{}/sendMessage", token);
+
+                let info = os_info::get();
+                let os_str = format!("{} {}", info.os_type(), info.version());
+                let arch_str = format!("{}", info.architecture().unwrap_or("Desconhecida"));
+
+                let (cpu, ram) = database::get_system_hardware_info();
+
+                let mut resolution = "Desconhecido".to_string();
+                let mut scale = "Desconhecido".to_string();
+                if let Ok(Some(monitor)) = panic_app_handle.primary_monitor() {
+                    let size = monitor.size();
+                    let scale_factor = monitor.scale_factor();
+                    resolution = format!("{}x{}", size.width, size.height);
+                    scale = format!("{}%", (scale_factor * 100.0) as i32);
+                }
+
+                let uptime_secs = setup_start_time.elapsed().as_secs();
+                let hours = uptime_secs / 3600;
+                let minutes = (uptime_secs % 3600) / 60;
+                let seconds = uptime_secs % 60;
+                let uptime_str = format!("{}h {}m {}s", hours, minutes, seconds);
+
+                let message_escaped = database::escape_html(message);
+                let loc_escaped = database::escape_html(&location);
+                let os_escaped = database::escape_html(&os_str);
+                let arch_escaped = database::escape_html(&arch_str);
+                let cpu_escaped = database::escape_html(&cpu);
+                let ram_escaped = database::escape_html(&ram);
+                let res_escaped = database::escape_html(&resolution);
+                let scale_escaped = database::escape_html(&scale);
+                let uptime_escaped = database::escape_html(&uptime_str);
+
+                let text_content = format!(
+                    "⚠️ <b>CRASH / ERRO TÉCNICO DETECTADO</b>\n\n<b>Origem:</b> 🦀 Backend Rust (Panic Hook)\n<b>Detalhes do Erro:</b>\n<code>{}</code>\n<b>Localização:</b> <code>{}</code>\n\n─── 🖥️ <b>DIAGNÓSTICO DO SISTEMA</b> ───\n<b>Sistema Operacional:</b> {}\n<b>Arquitetura:</b> {}\n<b>Processador:</b> {}\n<b>Memória RAM Total:</b> {}\n<b>Resolução da Tela:</b> {}\n<b>Escala do Display:</b> {}\n\n─── ⚙️ <b>SOFTWARE & STATUS</b> ───\n<b>App Versão:</b> v1.2.3 (DeskWidget)\n<b>Uptime do App:</b> {}",
+                    message_escaped, loc_escaped, os_escaped, arch_escaped, cpu_escaped, ram_escaped, res_escaped, scale_escaped, uptime_escaped
+                );
+
+                let payload = serde_json::json!({
+                    "chat_id": chat_id,
+                    "text": text_content,
+                    "parse_mode": "HTML"
+                });
+
+                if let Ok(json_str) = serde_json::to_string(&payload) {
+                    let _ = ureq::post(&url)
+                        .set("Content-Type", "application/json")
+                        .send_string(&json_str);
+                }
+            }));
 
             let app_handle = app.handle().clone();
 
@@ -112,6 +187,9 @@ pub fn run() {
             database::delete_task,
             database::update_task_tag,
             database::update_single_task_tag,
+            database::update_task_details,
+            database::send_feedback,
+            database::report_js_error,
             database::reorder_tasks,
             database::get_reminders,
             database::add_reminder,

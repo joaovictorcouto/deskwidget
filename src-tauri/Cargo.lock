@@ -829,10 +829,11 @@ dependencies = [
 
 [[package]]
 name = "deskwidget"
-version = "1.2.2"
+version = "1.2.3"
 dependencies = [
  "chrono",
  "log",
+ "os_info",
  "rusqlite",
  "serde",
  "serde_json",

@@ -8,6 +8,7 @@ use tauri_plugin_autostart::ManagerExt;
 pub struct AppState {
     pub db: Mutex<Connection>,
     pub active_popups: Mutex<Vec<String>>,
+    pub start_time: std::time::Instant,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -21,6 +22,7 @@ pub struct Task {
     pub createdAt: String,
     pub tag: Option<String>,
     pub tagColor: Option<String>,
+    pub details: Option<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -57,6 +59,7 @@ pub fn init_db(db_path: &str, app: &tauri::AppHandle) -> Result<Connection> {
     conn.execute(
         "CREATE TABLE IF NOT EXISTS tasks (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, completed BOOLEAN DEFAULT 0, position INTEGER DEFAULT 0, completedAt DATETIME, createdAt DATETIME DEFAULT CURRENT_TIMESTAMP, tag TEXT, tagColor TEXT)", [],
     )?;
+    let _ = conn.execute("ALTER TABLE tasks ADD COLUMN details TEXT", []);
     conn.execute(
         "CREATE TABLE IF NOT EXISTS reminders (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, datetime DATETIME NOT NULL, status TEXT DEFAULT 'agendado', recurrence TEXT, createdAt DATETIME DEFAULT CURRENT_TIMESTAMP)", [],
     )?;
@@ -109,7 +112,7 @@ pub fn init_db(db_path: &str, app: &tauri::AppHandle) -> Result<Connection> {
 #[tauri::command]
 pub fn get_tasks(state: tauri::State<AppState>) -> Result<Vec<Task>, String> {
     let conn = state.db.lock().unwrap();
-    let mut stmt = conn.prepare("SELECT id, title, completed, position, completedAt, createdAt, tag, tagColor FROM tasks").map_err(|e| e.to_string())?;
+    let mut stmt = conn.prepare("SELECT id, title, completed, position, completedAt, createdAt, tag, tagColor, details FROM tasks").map_err(|e| e.to_string())?;
     let task_iter = stmt
         .query_map([], |row| {
             Ok(Task {
@@ -121,6 +124,7 @@ pub fn get_tasks(state: tauri::State<AppState>) -> Result<Vec<Task>, String> {
                 createdAt: row.get(5)?,
                 tag: row.get(6)?,
                 tagColor: row.get(7)?,
+                details: row.get(8)?,
             })
         })
         .map_err(|e| e.to_string())?;
@@ -165,6 +169,7 @@ pub fn add_task(
         createdAt: Local::now().to_rfc3339(),
         tag,
         tagColor: tag_color,
+        details: None,
     })
 }
 
@@ -562,5 +567,215 @@ pub fn update_single_task_tag(
     )
     .map_err(|e| e.to_string())?;
     let _ = app.emit("data-updated", ());
+    Ok(true)
+}
+
+#[tauri::command]
+pub fn update_task_details(
+    id: i64,
+    details: Option<String>,
+    state: tauri::State<AppState>,
+    app: tauri::AppHandle,
+) -> Result<bool, String> {
+    state
+        .db
+        .lock()
+        .unwrap()
+        .execute(
+            "UPDATE tasks SET details = ?1 WHERE id = ?2",
+            params![details, id],
+        )
+        .map_err(|e| e.to_string())?;
+    let _ = app.emit("data-updated", ());
+    Ok(true)
+}
+
+#[tauri::command]
+pub fn get_system_hardware_info() -> (String, String) {
+    #[cfg(target_os = "windows")]
+    {
+        let cpu_out = std::process::Command::new("cmd")
+            .args(&["/C", "wmic cpu get Name"])
+            .output();
+        let cpu = cpu_out.ok().and_then(|o| {
+            String::from_utf8(o.stdout).ok().map(|s| {
+                let lines: Vec<&str> = s.lines().collect();
+                if lines.len() > 1 {
+                    lines[1].trim().to_string()
+                } else {
+                    "Desconhecido".to_string()
+                }
+            })
+        }).unwrap_or_else(|| "Desconhecido".to_string());
+
+        let ram_out = std::process::Command::new("cmd")
+            .args(&["/C", "wmic ComputerSystem get TotalPhysicalMemory"])
+            .output();
+        let ram = ram_out.ok().and_then(|o| {
+            String::from_utf8(o.stdout).ok().and_then(|s| {
+                let lines: Vec<&str> = s.lines().collect();
+                if lines.len() > 1 {
+                    lines[1].trim().parse::<u64>().ok().map(|bytes| {
+                        format!("{} GB", bytes / 1024 / 1024 / 1024)
+                    })
+                } else {
+                    None
+                }
+            })
+        }).unwrap_or_else(|| "Desconhecido".to_string());
+
+        (cpu, ram)
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        ("Desconhecido".to_string(), "Desconhecido".to_string())
+    }
+}
+
+pub fn escape_html(s: &str) -> String {
+    s.replace("&", "&amp;")
+     .replace("<", "&lt;")
+     .replace(">", "&gt;")
+}
+
+#[tauri::command]
+pub fn send_feedback(
+    feedback_type: String,
+    message: String,
+    app: tauri::AppHandle,
+    state: tauri::State<AppState>,
+) -> Result<bool, String> {
+    let token = "8904259622:AAEe_AK-7t-UILw0EIgklBT4Ba7626J1siE";
+    let chat_id = "8049604881";
+
+    if token.is_empty() || chat_id.is_empty() {
+        return Err("Telegram não configurado.".to_string());
+    }
+
+    let url = format!("https://api.telegram.org/bot{}/sendMessage", token);
+    
+    // Diagnósticos de Hardware e Software
+    let info = os_info::get();
+    let os_str = format!("{} {}", info.os_type(), info.version());
+    let arch_str = format!("{}", info.architecture().unwrap_or("Desconhecida"));
+    
+    let (cpu, ram) = get_system_hardware_info();
+    
+    let mut resolution = "Desconhecido".to_string();
+    let mut scale = "Desconhecido".to_string();
+    if let Ok(Some(monitor)) = app.primary_monitor() {
+        let size = monitor.size();
+        let scale_factor = monitor.scale_factor();
+        resolution = format!("{}x{}", size.width, size.height);
+        scale = format!("{}%", (scale_factor * 100.0) as i32);
+    }
+
+    let uptime_secs = state.start_time.elapsed().as_secs();
+    let hours = uptime_secs / 3600;
+    let minutes = (uptime_secs % 3600) / 60;
+    let seconds = uptime_secs % 60;
+    let uptime_str = format!("{}h {}m {}s", hours, minutes, seconds);
+
+    let msg_escaped = escape_html(&message);
+    let os_escaped = escape_html(&os_str);
+    let arch_escaped = escape_html(&arch_str);
+    let cpu_escaped = escape_html(&cpu);
+    let ram_escaped = escape_html(&ram);
+    let res_escaped = escape_html(&resolution);
+    let scale_escaped = escape_html(&scale);
+    let uptime_escaped = escape_html(&uptime_str);
+
+    let text_content = if feedback_type == "bug" {
+        format!(
+            "🐛 <b>NOVO BUG RELATADO PELO USUÁRIO</b>\n\n<b>Mensagem do Usuário:</b>\n\"{}\"\n\n─── 🖥️ <b>DIAGNÓSTICO DO DISPOSITIVO</b> ───\n<b>Sistema Operacional:</b> {}\n<b>Arquitetura:</b> {}\n<b>Processador:</b> {}\n<b>Memória RAM Total:</b> {}\n<b>Resolução da Tela:</b> {}\n<b>Escala do Display:</b> {}\n\n─── ⚙️ <b>SOFTWARE</b> ───\n<b>App Versão:</b> v1.2.3 (DeskWidget)\n<b>Uptime do App:</b> {}",
+            msg_escaped, os_escaped, arch_escaped, cpu_escaped, ram_escaped, res_escaped, scale_escaped, uptime_escaped
+        )
+    } else {
+        format!(
+            "💡 <b>NOVA SUGESTÃO DE MELIORIA</b>\n\n<b>Mensagem do Usuário:</b>\n\"{}\"\n\n─── ⚙️ <b>SOFTWARE</b> ───\n<b>App Versão:</b> v1.2.3 (DeskWidget)\n<b>Uptime do App:</b> {}",
+            msg_escaped, uptime_escaped
+        )
+    };
+
+    let payload = serde_json::json!({
+        "chat_id": chat_id,
+        "text": text_content,
+        "parse_mode": "HTML"
+    });
+
+    let json_str = serde_json::to_string(&payload).map_err(|e| e.to_string())?;
+
+    let _res = ureq::post(&url)
+        .set("Content-Type", "application/json")
+        .send_string(&json_str)
+        .map_err(|e| format!("Falha ao enviar para o Telegram: {}", e))?;
+
+    Ok(true)
+}
+
+#[tauri::command]
+pub fn report_js_error(
+    error_msg: String,
+    location: String,
+    app: tauri::AppHandle,
+    state: tauri::State<AppState>,
+) -> Result<bool, String> {
+    let token = "8904259622:AAEe_AK-7t-UILw0EIgklBT4Ba7626J1siE";
+    let chat_id = "8049604881";
+
+    if token.is_empty() || chat_id.is_empty() {
+        return Ok(false);
+    }
+
+    let url = format!("https://api.telegram.org/bot{}/sendMessage", token);
+
+    // OS & Hardware info
+    let info = os_info::get();
+    let os_str = format!("{} {}", info.os_type(), info.version());
+    let arch_str = format!("{}", info.architecture().unwrap_or("Desconhecida"));
+    let (cpu, ram) = get_system_hardware_info();
+
+    let mut resolution = "Desconhecido".to_string();
+    let mut scale = "Desconhecido".to_string();
+    if let Ok(Some(monitor)) = app.primary_monitor() {
+        let size = monitor.size();
+        let scale_factor = monitor.scale_factor();
+        resolution = format!("{}x{}", size.width, size.height);
+        scale = format!("{}%", (scale_factor * 100.0) as i32);
+    }
+
+    let uptime_secs = state.start_time.elapsed().as_secs();
+    let hours = uptime_secs / 3600;
+    let minutes = (uptime_secs % 3600) / 60;
+    let seconds = uptime_secs % 60;
+    let uptime_str = format!("{}h {}m {}s", hours, minutes, seconds);
+
+    let error_escaped = escape_html(&error_msg);
+    let loc_escaped = escape_html(&location);
+    let os_escaped = escape_html(&os_str);
+    let arch_escaped = escape_html(&arch_str);
+    let cpu_escaped = escape_html(&cpu);
+    let ram_escaped = escape_html(&ram);
+    let res_escaped = escape_html(&resolution);
+    let scale_escaped = escape_html(&scale);
+    let uptime_escaped = escape_html(&uptime_str);
+
+    let text_content = format!(
+        "⚠️ <b>CRASH / ERRO TÉCNICO DETECTADO</b>\n\n<b>Origem:</b> 🌐 Frontend React (JS Error)\n<b>Detalhes do Erro:</b>\n<code>{}</code>\n<b>Localização:</b> <code>{}</code>\n\n─── 🖥️ <b>DIAGNÓSTICO DO SISTEMA</b> ───\n<b>Sistema Operacional:</b> {}\n<b>Arquitetura:</b> {}\n<b>Processador:</b> {}\n<b>Memória RAM Total:</b> {}\n<b>Resolução da Tela:</b> {}\n<b>Escala do Display:</b> {}\n\n─── ⚙️ <b>SOFTWARE & STATUS</b> ───\n<b>App Versão:</b> v1.2.3 (DeskWidget)\n<b>Uptime do App:</b> {}",
+        error_escaped, loc_escaped, os_escaped, arch_escaped, cpu_escaped, ram_escaped, res_escaped, scale_escaped, uptime_escaped
+    );
+
+    let payload = serde_json::json!({
+        "chat_id": chat_id,
+        "text": text_content,
+        "parse_mode": "HTML"
+    });
+
+    let json_str = serde_json::to_string(&payload).map_err(|e| e.to_string())?;
+
+    let _ = ureq::post(&url)
+        .set("Content-Type", "application/json")
+        .send_string(&json_str);
+
     Ok(true)
 }

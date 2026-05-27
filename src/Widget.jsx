@@ -6,12 +6,24 @@
  * - Puxador: A pequena barra que o usuário clica e arrasta para mover a posição vertical.
  */
 import React, { useState, useEffect, useRef } from 'react';
-import { Settings, CheckCircle, Bell, ChevronDown, ChevronRight, GripVertical, Clock, Tag, X, Sun, Moon, ArrowUp } from 'lucide-react';
+import { Settings, CheckCircle, Bell, ChevronDown, ChevronRight, GripVertical, Clock, Tag, X, Sun, Moon, ArrowUp, AlignLeft } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import CustomConfirm from './components/CustomConfirm';
 
 function Widget() {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [expandedTaskIds, setExpandedTaskIds] = useState(new Set());
+  const toggleTaskDetails = (taskId) => {
+    setExpandedTaskIds(prev => {
+      const next = new Set(prev);
+      if (next.has(taskId)) {
+        next.delete(taskId);
+      } else {
+        next.add(taskId);
+      }
+      return next;
+    });
+  };
   const [tasks, setTasks] = useState([]);
   const [reminders, setReminders] = useState([]);
   const [newTaskTitle, setNewTaskTitle] = useState('');
@@ -76,6 +88,16 @@ function Widget() {
     return 0;
   };
 
+  const performSilentAutoUpdate = async (url) => {
+    if (!url) return;
+    try {
+      await window.api?.downloadUpdate(url);
+      await window.api?.executeUpdate();
+    } catch (err) {
+      console.error('Erro na auto-atualização silenciosa:', err);
+    }
+  };
+
   const checkUpdates = async (silent = true) => {
     try {
       const response = await fetch('https://api.github.com/repos/joaovictorcouto/deskwidget/releases/latest');
@@ -88,16 +110,20 @@ function Widget() {
         setUpdateVersion(latestVer);
         setUpdateAvailable(true);
         
+        let downloadUrl = '';
         const exeAsset = data.assets.find(asset => asset.name.endsWith('.exe') || asset.name.includes('setup'));
         if (exeAsset) {
-          setUpdateUrl(exeAsset.browser_download_url);
+          downloadUrl = exeAsset.browser_download_url;
         } else {
-          setUpdateUrl(data.assets[0]?.browser_download_url || data.html_url);
+          downloadUrl = data.assets[0]?.browser_download_url || data.html_url;
         }
+        setUpdateUrl(downloadUrl);
         
         const ignored = localStorage.getItem('deskwidget_ignored_version') || '';
         if (latestVer !== ignored) {
-          if (!silent) {
+          if (silent) {
+            performSilentAutoUpdate(downloadUrl);
+          } else {
             setShowUpdatePanel(true);
           }
         }
@@ -709,6 +735,13 @@ function Widget() {
     }
   };
 
+  const handleUpdateTaskDetails = async (id, details) => {
+    if (window.api) {
+      await window.api.updateTaskDetails(id, details || null);
+      loadData();
+    }
+  };
+
   const handleDeleteTag = async (tagName) => {
     setConfirmConfig({
       isOpen: true,
@@ -1186,148 +1219,189 @@ function Widget() {
                             className="task-item"
                             ref={provided.innerRef}
                             {...provided.draggableProps}
+                            style={{ ...provided.draggableProps.style, display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: '4px', marginBottom: '12px' }}
                           >
-                            <div {...provided.dragHandleProps} style={{ cursor: 'grab', color: 'var(--text-muted)' }}>
-                              <GripVertical size={14} />
-                            </div>
-                            <input 
-                              type="checkbox" 
-                              className="task-checkbox" 
-                              checked={false}
-                              onChange={() => handleToggleTask(task.id, false)}
-                            />
-                            {editingTaskId === task.id ? (
-                              <input
-                                autoFocus
-                                type="text"
-                                className="add-task-input"
-                                style={{ flex: 1, padding: '4px 8px', fontSize: '0.85rem' }}
-                                value={editingTaskTitle}
-                                onChange={(e) => setEditingTaskTitle(e.target.value)}
-                                onBlur={() => handleUpdateTaskTitle(task.id)}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') handleUpdateTaskTitle(task.id);
-                                  if (e.key === 'Escape') {
-                                  setEditingTaskId(null);
-                                  setEditingTaskTitle('');
-                                }
-                              }}
-                            />
-                          ) : (
-                            <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
-                              <span 
-                                className="task-title" 
-                                style={{ cursor: 'text', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
-                                onClick={() => {
-                                  setEditingTaskId(task.id);
-                                  setEditingTaskTitle(task.title);
-                                }}
-                              >
-                                {task.title}
-                              </span>
-                              {settings.enableTags === 'true' && task.tag && (
-                                <span style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', backgroundColor: task.tagColor, color: '#fff', fontWeight: 600, flexShrink: 0 }}>
-                                  {task.tag}
-                                </span>
-                              )}
-                            </div>
-                          )}
-                          {settings.enableTags === 'true' && (
-                            <span 
-                              className={`task-tag-trigger ${editingTaskTagId === task.id ? 'active' : ''}`}
-                              style={{ cursor: 'pointer', color: task.tag ? task.tagColor : 'var(--text-muted)', marginLeft: '4px', display: 'flex', alignItems: 'center', position: 'relative' }} 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setEditingTaskTagId(task.id);
-                                setSelectedTaskTag(task.tag || '');
-                                setShowTaskTagMenu(true);
-                              }}
-                              title={task.tag ? `Mudar etiqueta: ${task.tag}` : "Adicionar etiqueta"}
-                            >
-                              <Tag size={12} />
-                              {editingTaskTagId === task.id && showTaskTagMenu && (
-                                <div 
-                                  ref={taskTagMenuRef}
-                                  style={{ 
-                                    position: 'absolute', 
-                                    right: '20px', 
-                                    top: '15px', 
-                                    backgroundColor: 'var(--bg-main)', 
-                                    border: '1px solid var(--border)', 
-                                    borderRadius: '8px', 
-                                    padding: '10px', 
-                                    zIndex: 1000, 
-                                    width: '200px', 
-                                    boxShadow: '0 4px 12px rgba(0,0,0,0.5)', 
-                                    cursor: 'default',
-                                    textAlign: 'left'
-                                  }} 
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  <div style={{ fontSize: '0.75rem', fontWeight: 'bold', marginBottom: '8px', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    ETIQUETA DA TAREFA
-                                    <span style={{ cursor: 'pointer', padding: '2px 5px' }} onClick={() => { setShowTaskTagMenu(false); setEditingTaskTagId(null); }}>✕</span>
-                                  </div>
-                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginBottom: '10px' }}>
-                                    <span 
-                                      style={{ fontSize: '0.7rem', padding: '3px 8px', borderRadius: '12px', cursor: 'pointer', border: '1px solid var(--border)', backgroundColor: !selectedTaskTag ? 'rgba(255,255,255,0.1)' : 'transparent', color: 'var(--text-main)' }}
-                                      onClick={() => handleUpdateTaskTag(task.id, '')}
-                                    >Nenhuma</span>
-                                    {savedTags.map(tag => (
-                                      <span 
-                                        key={tag.name}
-                                        style={{ fontSize: '0.7rem', padding: '2px 6px', borderRadius: '12px', cursor: 'pointer', backgroundColor: tag.color, color: '#fff', opacity: selectedTaskTag === tag.name ? 1 : 0.6 }}
-                                        onClick={() => handleUpdateTaskTag(task.id, tag.name)}
-                                      >
-                                        {tag.name}
-                                      </span>
-                                    ))}
-                                  </div>
-                                  <input 
-                                    type="text" 
-                                    className="form-control" 
-                                    style={{ fontSize: '0.75rem', padding: '4px', height: '24px', backgroundColor: 'var(--bg-hover)', color: 'var(--text-main)', border: '1px solid var(--border)' }}
-                                    placeholder="Nova tag..."
-                                    value={newTaskTagInputVal}
-                                    onChange={(e) => setNewTaskTagInputVal(e.target.value)}
-                                    onKeyDown={(e) => {
-                                      if (e.key === 'Enter') {
-                                        const cleanVal = newTaskTagInputVal.trim();
-                                        if (cleanVal) {
-                                          handleUpdateTaskTag(task.id, cleanVal);
-                                        }
-                                        setNewTaskTagInputVal('');
-                                        setShowTaskTagMenu(false);
-                                      }
-                                    }}
-                                  />
-                                  <div 
-                                    onClick={() => { setShowTaskTagMenu(false); setEditingTaskTagId(null); setShowTagManager(true); }}
-                                    style={{ 
-                                      marginTop: '8px', 
-                                      paddingTop: '6px', 
-                                      borderTop: '1px solid var(--border)', 
-                                      textAlign: 'center', 
-                                      fontSize: '0.7rem', 
-                                      color: 'var(--primary)', 
-                                      cursor: 'pointer',
-                                      fontWeight: 'bold',
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      justifyContent: 'center',
-                                      gap: '4px'
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '100%' }}>
+                              <div {...provided.dragHandleProps} style={{ cursor: 'grab', color: 'var(--text-muted)' }}>
+                                <GripVertical size={14} />
+                              </div>
+                              <input 
+                                type="checkbox" 
+                                className="task-checkbox" 
+                                checked={false}
+                                onChange={() => handleToggleTask(task.id, false)}
+                              />
+                              {editingTaskId === task.id ? (
+                                <input
+                                  autoFocus
+                                  type="text"
+                                  className="add-task-input"
+                                  style={{ flex: 1, padding: '4px 8px', fontSize: '0.85rem' }}
+                                  value={editingTaskTitle}
+                                  onChange={(e) => setEditingTaskTitle(e.target.value)}
+                                  onBlur={() => handleUpdateTaskTitle(task.id)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') handleUpdateTaskTitle(task.id);
+                                    if (e.key === 'Escape') {
+                                      setEditingTaskId(null);
+                                      setEditingTaskTitle('');
+                                    }
+                                  }}
+                                />
+                              ) : (
+                                <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
+                                  <span 
+                                    className="task-title" 
+                                    style={{ cursor: 'text', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                                    onClick={() => {
+                                      setEditingTaskId(task.id);
+                                      setEditingTaskTitle(task.title);
                                     }}
                                   >
-                                    <Settings size={10} /> Gerenciar Etiquetas
-                                  </div>
+                                    {task.title}
+                                  </span>
+                                  {settings.enableTags === 'true' && task.tag && (
+                                    <span style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', backgroundColor: task.tagColor, color: '#fff', fontWeight: 600, flexShrink: 0 }}>
+                                      {task.tag}
+                                    </span>
+                                  )}
                                 </div>
                               )}
-                            </span>
-                          )}
-                          <span style={{ cursor: 'pointer', color: 'var(--text-muted)', marginLeft: '4px' }} onClick={() => handleDeleteTask(task.id)}>
-                            <X size={14} />
-                          </span>
-                        </div>
+                              {settings.enableTags === 'true' && (
+                                <span 
+                                  className={`task-tag-trigger ${editingTaskTagId === task.id ? 'active' : ''}`}
+                                  style={{ cursor: 'pointer', color: task.tag ? task.tagColor : 'var(--text-muted)', marginLeft: '4px', display: 'flex', alignItems: 'center', position: 'relative' }} 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setEditingTaskTagId(task.id);
+                                    setSelectedTaskTag(task.tag || '');
+                                    setShowTaskTagMenu(true);
+                                  }}
+                                  title={task.tag ? `Mudar etiqueta: ${task.tag}` : "Adicionar etiqueta"}
+                                >
+                                  <Tag size={12} />
+                                  {editingTaskTagId === task.id && showTaskTagMenu && (
+                                    <div 
+                                      ref={taskTagMenuRef}
+                                      style={{ 
+                                        position: 'absolute', 
+                                        right: '20px', 
+                                        top: '15px', 
+                                        backgroundColor: 'var(--bg-main)', 
+                                        border: '1px solid var(--border)', 
+                                        borderRadius: '8px', 
+                                        padding: '10px', 
+                                        zIndex: 1000, 
+                                        width: '200px', 
+                                        boxShadow: '0 4px 12px rgba(0,0,0,0.5)', 
+                                        cursor: 'default',
+                                        textAlign: 'left'
+                                      }} 
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      <div style={{ fontSize: '0.75rem', fontWeight: 'bold', marginBottom: '8px', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        ETIQUETA DA TAREFA
+                                        <span style={{ cursor: 'pointer', padding: '2px 5px' }} onClick={() => { setShowTaskTagMenu(false); setEditingTaskTagId(null); }}>✕</span>
+                                      </div>
+                                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginBottom: '10px' }}>
+                                        <span 
+                                          style={{ fontSize: '0.7rem', padding: '3px 8px', borderRadius: '12px', cursor: 'pointer', border: '1px solid var(--border)', backgroundColor: !selectedTaskTag ? 'rgba(255,255,255,0.1)' : 'transparent', color: 'var(--text-main)' }}
+                                          onClick={() => handleUpdateTaskTag(task.id, '')}
+                                        >Nenhuma</span>
+                                        {savedTags.map(tag => (
+                                          <span 
+                                            key={tag.name}
+                                            style={{ fontSize: '0.7rem', padding: '2px 6px', borderRadius: '12px', cursor: 'pointer', backgroundColor: tag.color, color: '#fff', opacity: selectedTaskTag === tag.name ? 1 : 0.6 }}
+                                            onClick={() => handleUpdateTaskTag(task.id, tag.name)}
+                                          >
+                                            {tag.name}
+                                          </span>
+                                        ))}
+                                      </div>
+                                      <input 
+                                        type="text" 
+                                        className="form-control" 
+                                        style={{ fontSize: '0.75rem', padding: '4px', height: '24px', backgroundColor: 'var(--bg-hover)', color: 'var(--text-main)', border: '1px solid var(--border)' }}
+                                        placeholder="Nova tag..."
+                                        value={newTaskTagInputVal}
+                                        onChange={(e) => setNewTaskTagInputVal(e.target.value)}
+                                        onKeyDown={(e) => {
+                                          if (e.key === 'Enter') {
+                                            const cleanVal = newTaskTagInputVal.trim();
+                                            if (cleanVal) {
+                                              handleUpdateTaskTag(task.id, cleanVal);
+                                            }
+                                            setNewTaskTagInputVal('');
+                                            setShowTaskTagMenu(false);
+                                          }
+                                        }}
+                                      />
+                                      <div 
+                                        onClick={() => { setShowTaskTagMenu(false); setEditingTaskTagId(null); setShowTagManager(true); }}
+                                        style={{ 
+                                          marginTop: '8px', 
+                                          paddingTop: '6px', 
+                                          borderTop: '1px solid var(--border)', 
+                                          textAlign: 'center', 
+                                          fontSize: '0.7rem', 
+                                          color: 'var(--primary)', 
+                                          cursor: 'pointer',
+                                          fontWeight: 'bold',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
+                                          gap: '4px'
+                                        }}
+                                      >
+                                        <Settings size={10} /> Gerenciar Etiquetas
+                                      </div>
+                                    </div>
+                                  )}
+                                </span>
+                              )}
+                              
+                              <span 
+                                style={{ cursor: 'pointer', color: task.details ? 'var(--primary)' : 'var(--text-muted)', marginLeft: '4px', display: 'flex', alignItems: 'center' }} 
+                                onClick={(e) => { e.stopPropagation(); toggleTaskDetails(task.id); }}
+                                title="Detalhes da tarefa"
+                              >
+                                <AlignLeft size={14} />
+                              </span>
+
+                              <span style={{ cursor: 'pointer', color: 'var(--text-muted)', marginLeft: '4px' }} onClick={() => handleDeleteTask(task.id)}>
+                                <X size={14} />
+                              </span>
+                            </div>
+
+                            {expandedTaskIds.has(task.id) && (
+                              <div style={{ paddingLeft: '26px', paddingRight: '10px', width: '100%' }} onClick={(e) => e.stopPropagation()}>
+                                <textarea
+                                  className="form-control"
+                                  style={{
+                                    width: '100%',
+                                    minHeight: '60px',
+                                    fontSize: '0.78rem',
+                                    padding: '6px 8px',
+                                    backgroundColor: 'rgba(var(--bg-sidebar-rgb), 0.4)',
+                                    border: '1px solid var(--border)',
+                                    color: 'var(--text-main)',
+                                    resize: 'vertical',
+                                    borderRadius: '6px',
+                                    outline: 'none',
+                                    fontFamily: 'inherit'
+                                  }}
+                                  placeholder="Adicionar detalhes da tarefa..."
+                                  defaultValue={task.details || ''}
+                                  onBlur={(e) => handleUpdateTaskDetails(task.id, e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && e.ctrlKey) {
+                                      e.target.blur();
+                                    }
+                                  }}
+                                />
+                              </div>
+                            )}
+                          </div>
                         )}
                       </Draggable>
                     ))}
@@ -1348,146 +1422,188 @@ function Widget() {
             {!isCompletedCollapsed && (
               <div className="task-list" style={{ opacity: 0.6 }}>
                 {completedTasks.map(task => (
-                  <div key={task.id} className="task-item">
-                    <input 
-                      type="checkbox" 
-                      className="task-checkbox" 
-                      checked={true}
-                      onChange={() => handleToggleTask(task.id, true)}
-                    />
-                    {editingTaskId === task.id ? (
-                      <input
-                        autoFocus
-                        type="text"
-                        className="add-task-input"
-                        style={{ flex: 1, padding: '4px 8px', fontSize: '0.85rem' }}
-                        value={editingTaskTitle}
-                        onChange={(e) => setEditingTaskTitle(e.target.value)}
-                        onBlur={() => handleUpdateTaskTitle(task.id)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') handleUpdateTaskTitle(task.id);
-                          if (e.key === 'Escape') {
-                            setEditingTaskId(null);
-                            setEditingTaskTitle('');
-                          }
-                        }}
+                  <div 
+                    key={task.id} 
+                    className="task-item"
+                    style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: '4px', marginBottom: '12px' }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '100%' }}>
+                      <input 
+                        type="checkbox" 
+                        className="task-checkbox" 
+                        checked={true}
+                        onChange={() => handleToggleTask(task.id, true)}
                       />
-                    ) : (
-                      <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
-                        <span 
-                          className="task-title completed" 
-                          style={{ cursor: 'text', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
-                          onClick={() => {
-                            setEditingTaskId(task.id);
-                            setEditingTaskTitle(task.title);
+                      {editingTaskId === task.id ? (
+                        <input
+                          autoFocus
+                          type="text"
+                          className="add-task-input"
+                          style={{ flex: 1, padding: '4px 8px', fontSize: '0.85rem' }}
+                          value={editingTaskTitle}
+                          onChange={(e) => setEditingTaskTitle(e.target.value)}
+                          onBlur={() => handleUpdateTaskTitle(task.id)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleUpdateTaskTitle(task.id);
+                            if (e.key === 'Escape') {
+                              setEditingTaskId(null);
+                              setEditingTaskTitle('');
+                            }
                           }}
-                        >
-                          {task.title}
-                        </span>
-                        {settings.enableTags === 'true' && task.tag && (
-                          <span style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', backgroundColor: task.tagColor, color: '#fff', fontWeight: 600, flexShrink: 0, opacity: 0.7 }}>
-                            {task.tag}
+                        />
+                      ) : (
+                        <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
+                          <span 
+                            className="task-title completed" 
+                            style={{ cursor: 'text', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                            onClick={() => {
+                              setEditingTaskId(task.id);
+                              setEditingTaskTitle(task.title);
+                            }}
+                          >
+                            {task.title}
                           </span>
-                        )}
+                          {settings.enableTags === 'true' && task.tag && (
+                            <span style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', backgroundColor: task.tagColor, color: '#fff', fontWeight: 600, flexShrink: 0, opacity: 0.7 }}>
+                              {task.tag}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                      {settings.enableTags === 'true' && (
+                        <span 
+                          style={{ cursor: 'pointer', color: task.tag ? task.tagColor : 'var(--text-muted)', marginLeft: '4px', display: 'flex', alignItems: 'center', position: 'relative' }} 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingTaskTagId(task.id);
+                            setSelectedTaskTag(task.tag || '');
+                            setShowTaskTagMenu(true);
+                          }}
+                          title={task.tag ? `Mudar etiqueta: ${task.tag}` : "Adicionar etiqueta"}
+                        >
+                          <Tag size={12} />
+                          {editingTaskTagId === task.id && showTaskTagMenu && (
+                            <div 
+                              ref={taskTagMenuRef}
+                              style={{ 
+                                position: 'absolute', 
+                                right: '20px', 
+                                top: '15px', 
+                                backgroundColor: 'var(--bg-main)', 
+                                border: '1px solid var(--border)', 
+                                borderRadius: '8px', 
+                                padding: '10px', 
+                                zIndex: 1000, 
+                                width: '200px', 
+                                boxShadow: '0 4px 12px rgba(0,0,0,0.5)', 
+                                cursor: 'default',
+                                textAlign: 'left'
+                              }} 
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <div style={{ fontSize: '0.75rem', fontWeight: 'bold', marginBottom: '8px', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                ETIQUETA DA TAREFA
+                                <span style={{ cursor: 'pointer', padding: '2px 5px' }} onClick={() => { setShowTaskTagMenu(false); setEditingTaskTagId(null); }}>✕</span>
+                              </div>
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginBottom: '10px' }}>
+                                <span 
+                                  style={{ fontSize: '0.7rem', padding: '3px 8px', borderRadius: '12px', cursor: 'pointer', border: '1px solid var(--border)', backgroundColor: !selectedTaskTag ? 'rgba(255,255,255,0.1)' : 'transparent', color: 'var(--text-main)' }}
+                                  onClick={() => handleUpdateTaskTag(task.id, '')}
+                                >Nenhuma</span>
+                                {savedTags.map(tag => (
+                                  <span 
+                                    key={tag.name}
+                                    style={{ fontSize: '0.7rem', padding: '2px 6px', borderRadius: '12px', cursor: 'pointer', backgroundColor: tag.color, color: '#fff', opacity: selectedTaskTag === tag.name ? 1 : 0.6 }}
+                                    onClick={() => handleUpdateTaskTag(task.id, tag.name)}
+                                  >
+                                    {tag.name}
+                                  </span>
+                                ))}
+                              </div>
+                              <input 
+                                type="text" 
+                                className="form-control" 
+                                style={{ fontSize: '0.75rem', padding: '4px', height: '24px', backgroundColor: 'var(--bg-hover)', color: 'var(--text-main)', border: '1px solid var(--border)' }}
+                                placeholder="Nova tag..."
+                                value={newTaskTagInputVal}
+                                onChange={(e) => setNewTaskTagInputVal(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    const cleanVal = newTaskTagInputVal.trim();
+                                    if (cleanVal) {
+                                      handleUpdateTaskTag(task.id, cleanVal);
+                                    }
+                                    setNewTaskTagInputVal('');
+                                    setShowTaskTagMenu(false);
+                                  }
+                                }}
+                              />
+                              <div 
+                                onClick={() => { setShowTaskTagMenu(false); setEditingTaskTagId(null); setShowTagManager(true); }}
+                                style={{ 
+                                  marginTop: '8px', 
+                                  paddingTop: '6px', 
+                                  borderTop: '1px solid var(--border)', 
+                                  textAlign: 'center', 
+                                  fontSize: '0.7rem', 
+                                  color: 'var(--primary)', 
+                                  cursor: 'pointer',
+                                  fontWeight: 'bold',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  gap: '4px'
+                                }}
+                              >
+                                <Settings size={10} /> Gerenciar Etiquetas
+                              </div>
+                            </div>
+                          )}
+                        </span>
+                      )}
+                      <span 
+                        style={{ cursor: 'pointer', color: task.details ? 'var(--primary)' : 'var(--text-muted)', marginLeft: '4px', display: 'flex', alignItems: 'center' }} 
+                        onClick={(e) => { e.stopPropagation(); toggleTaskDetails(task.id); }}
+                        title="Detalhes da tarefa"
+                      >
+                        <AlignLeft size={14} />
+                      </span>
+                      <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
+                        {formatCompletedDate(task.completedAt)}
+                      </span>
+                      <span style={{ cursor: 'pointer', color: 'var(--text-muted)', marginLeft: '4px' }} onClick={() => handleDeleteTask(task.id)}>
+                        <X size={14} />
+                      </span>
+                    </div>
+
+                    {expandedTaskIds.has(task.id) && (
+                      <div style={{ paddingLeft: '26px', paddingRight: '10px', width: '100%' }} onClick={(e) => e.stopPropagation()}>
+                        <textarea
+                          className="form-control"
+                          style={{
+                            width: '100%',
+                            minHeight: '60px',
+                            fontSize: '0.78rem',
+                            padding: '6px 8px',
+                            backgroundColor: 'rgba(var(--bg-sidebar-rgb), 0.4)',
+                            border: '1px solid var(--border)',
+                            color: 'var(--text-main)',
+                            resize: 'vertical',
+                            borderRadius: '6px',
+                            outline: 'none',
+                            fontFamily: 'inherit'
+                          }}
+                          placeholder="Adicionar detalhes da tarefa..."
+                          defaultValue={task.details || ''}
+                          onBlur={(e) => handleUpdateTaskDetails(task.id, e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && e.ctrlKey) {
+                              e.target.blur();
+                            }
+                          }}
+                        />
                       </div>
                     )}
-                    {settings.enableTags === 'true' && (
-                      <span 
-                        style={{ cursor: 'pointer', color: task.tag ? task.tagColor : 'var(--text-muted)', marginLeft: '4px', display: 'flex', alignItems: 'center', position: 'relative' }} 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setEditingTaskTagId(task.id);
-                          setSelectedTaskTag(task.tag || '');
-                          setShowTaskTagMenu(true);
-                        }}
-                        title={task.tag ? `Mudar etiqueta: ${task.tag}` : "Adicionar etiqueta"}
-                      >
-                        <Tag size={12} />
-                        {editingTaskTagId === task.id && showTaskTagMenu && (
-                          <div 
-                            ref={taskTagMenuRef}
-                            style={{ 
-                              position: 'absolute', 
-                              right: '20px', 
-                              top: '15px', 
-                              backgroundColor: 'var(--bg-main)', 
-                              border: '1px solid var(--border)', 
-                              borderRadius: '8px', 
-                              padding: '10px', 
-                              zIndex: 1000, 
-                              width: '200px', 
-                              boxShadow: '0 4px 12px rgba(0,0,0,0.5)', 
-                              cursor: 'default',
-                              textAlign: 'left'
-                            }} 
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <div style={{ fontSize: '0.75rem', fontWeight: 'bold', marginBottom: '8px', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                              ETIQUETA DA TAREFA
-                              <span style={{ cursor: 'pointer', padding: '2px 5px' }} onClick={() => { setShowTaskTagMenu(false); setEditingTaskTagId(null); }}>✕</span>
-                            </div>
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginBottom: '10px' }}>
-                              <span 
-                                style={{ fontSize: '0.7rem', padding: '3px 8px', borderRadius: '12px', cursor: 'pointer', border: '1px solid var(--border)', backgroundColor: !selectedTaskTag ? 'rgba(255,255,255,0.1)' : 'transparent', color: 'var(--text-main)' }}
-                                onClick={() => handleUpdateTaskTag(task.id, '')}
-                              >Nenhuma</span>
-                              {savedTags.map(tag => (
-                                <span 
-                                  key={tag.name}
-                                  style={{ fontSize: '0.7rem', padding: '2px 6px', borderRadius: '12px', cursor: 'pointer', backgroundColor: tag.color, color: '#fff', opacity: selectedTaskTag === tag.name ? 1 : 0.6 }}
-                                  onClick={() => handleUpdateTaskTag(task.id, tag.name)}
-                                >
-                                  {tag.name}
-                                </span>
-                              ))}
-                            </div>
-                            <input 
-                              type="text" 
-                              className="form-control" 
-                              style={{ fontSize: '0.75rem', padding: '4px', height: '24px', backgroundColor: 'var(--bg-hover)', color: 'var(--text-main)', border: '1px solid var(--border)' }}
-                              placeholder="Nova tag..."
-                              value={newTaskTagInputVal}
-                              onChange={(e) => setNewTaskTagInputVal(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  const cleanVal = newTaskTagInputVal.trim();
-                                  if (cleanVal) {
-                                    handleUpdateTaskTag(task.id, cleanVal);
-                                  }
-                                  setNewTaskTagInputVal('');
-                                  setShowTaskTagMenu(false);
-                                }
-                              }}
-                            />
-                            <div 
-                              onClick={() => { setShowTaskTagMenu(false); setEditingTaskTagId(null); setShowTagManager(true); }}
-                              style={{ 
-                                marginTop: '8px', 
-                                paddingTop: '6px', 
-                                borderTop: '1px solid var(--border)', 
-                                textAlign: 'center', 
-                                fontSize: '0.7rem', 
-                                color: 'var(--primary)', 
-                                cursor: 'pointer',
-                                fontWeight: 'bold',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                gap: '4px'
-                              }}
-                            >
-                              <Settings size={10} /> Gerenciar Etiquetas
-                            </div>
-                          </div>
-                        )}
-                      </span>
-                    )}
-                    <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
-                      {formatCompletedDate(task.completedAt)}
-                    </span>
-                    <span style={{ cursor: 'pointer', color: 'var(--text-muted)', marginLeft: '4px' }} onClick={() => handleDeleteTask(task.id)}>
-                      <X size={14} />
-                    </span>
                   </div>
                 ))}
               </div>
