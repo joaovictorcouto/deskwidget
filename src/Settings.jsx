@@ -19,7 +19,7 @@ function Settings() {
   const [feedbackError, setFeedbackError] = useState('');
 
   // Estados do Updater na aba Sobre
-  const CURRENT_VERSION = '1.2.3.3';
+  const CURRENT_VERSION = '1.2.3.4';
   const [updateStatus, setUpdateStatus] = useState('idle');
   const [updateVersion, setUpdateVersion] = useState('');
   const [downloadPercent, setDownloadPercent] = useState(0);

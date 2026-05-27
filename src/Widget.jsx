@@ -66,7 +66,7 @@ function Widget() {
   const [confirmConfig, setConfirmConfig] = useState({ isOpen: false, message: '', onConfirm: null });
 
   // Estados de Atualização (Updater)
-  const CURRENT_VERSION = '1.2.3.3';
+  const CURRENT_VERSION = '1.2.3.4';
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [updateVersion, setUpdateVersion] = useState('');
   const [updateUrl, setUpdateUrl] = useState('');
