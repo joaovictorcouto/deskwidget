@@ -727,30 +727,35 @@ async fn download_update(url: String, app: tauri::AppHandle) -> Result<(), Strin
 #[tauri::command]
 fn execute_update(app: tauri::AppHandle) -> Result<(), String> {
     let temp_path = std::env::temp_dir().join("DeskWidget_Setup.exe");
+    let temp_str = temp_path.to_string_lossy().to_string();
 
     // Pega o caminho do exe atual para relançar após instalação
     let exe_path = std::env::current_exe().map_err(|e| e.to_string())?;
     let exe_str = exe_path.to_string_lossy().to_string();
 
-    // Inicia instalador NSIS silencioso e captura o PID
-    let child = std::process::Command::new(&temp_path)
-        .args(&["/S"])
-        .spawn()
-        .map_err(|e| format!("Erro ao iniciar instalador: {}", e))?;
+    // ID do processo atual para aguardar a finalização antes de instalar
+    let current_pid = std::process::id();
 
-    let pid = child.id();
-
-    // PowerShell oculto: aguarda o instalador terminar → relança o app
+    // PowerShell oculto:
+    // 1. Aguarda o app atual finalizar completamente (liberando o arquivo exe)
+    // 2. Inicia o instalador NSIS em modo silencioso (/S) e aguarda ele terminar
+    // 3. Aguarda 1 segundo de segurança adicional
+    // 4. Relança o aplicativo atualizado
     let script = format!(
-        "Wait-Process -Id {pid} -ErrorAction SilentlyContinue; Start-Sleep -Seconds 1; Start-Process -FilePath '{exe}'",
-        pid = pid,
+        "Wait-Process -Id {current_pid} -ErrorAction SilentlyContinue; \
+         $installer = Start-Process -FilePath '{installer}' -ArgumentList '/S' -PassThru -NoNewWindow; \
+         $installer | Wait-Process -ErrorAction SilentlyContinue; \
+         Start-Sleep -Seconds 1; \
+         Start-Process -FilePath '{exe}'",
+        current_pid = current_pid,
+        installer = temp_str.replace("'", "''"),
         exe = exe_str.replace("'", "''")
     );
 
     std::process::Command::new("powershell")
         .args(&["-WindowStyle", "Hidden", "-NonInteractive", "-Command", &script])
         .spawn()
-        .map_err(|e| format!("Erro ao iniciar relaunch: {}", e))?;
+        .map_err(|e| format!("Erro ao iniciar script de atualização: {}", e))?;
 
     app.exit(0);
     Ok(())

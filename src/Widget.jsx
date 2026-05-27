@@ -95,6 +95,12 @@ function Widget() {
       await window.api?.executeUpdate();
     } catch (err) {
       console.error('Erro na auto-atualização silenciosa:', err);
+      if (window.api?.reportJsError) {
+        window.api.reportJsError(
+          `Erro na auto-atualização silenciosa: ${err?.message || String(err)}`,
+          'Widget.jsx -> performSilentAutoUpdate'
+        ).catch(console.error);
+      }
     }
   };
 
