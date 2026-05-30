@@ -184,18 +184,7 @@ pub fn run() {
                 })
                 .build(app)?;
 
-            let mut is_licensed = false;
-            if let Ok(conn) = app.state::<database::AppState>().db.lock() {
-                if let Ok(license_key) = conn.query_row(
-                    "SELECT value FROM settings WHERE key = 'license_key'",
-                    [],
-                    |row| row.get::<_, String>(0)
-                ) {
-                    if security::verify_license(license_key).is_ok() {
-                        is_licensed = true;
-                    }
-                }
-            }
+
 
             #[cfg(target_os = "windows")]
             {
@@ -246,7 +235,7 @@ pub fn run() {
 
             if let Some(window) = app.get_webview_window("main") {
                 position_window(&app_handle, false, None, None, None, None, None);
-                window.show().unwrap();
+                let _ = window.show();
             }
             Ok(())
         })
