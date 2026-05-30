@@ -93,6 +93,10 @@ pub fn init_db(db_path: &str, app: &tauri::AppHandle) -> Result<Connection> {
         ("popupGap", "10".to_string()),
         ("edge", "right".to_string()),
         ("yPosition", "115".to_string()),
+        ("enableMediaControl", "true".to_string()),
+        ("modulesOrder", "tasks,reminders,pomodoro,notes,media".to_string()),
+        ("pomodoroPresets", "[]".to_string()),
+        ("sectionHeights", "{}".to_string()),
     ];
     for (k, v) in default_settings {
         let exists: Result<String, _> =
@@ -333,6 +337,101 @@ pub fn update_reminder(
     app: tauri::AppHandle,
 ) -> Result<bool, String> {
     let conn = state.db.lock().unwrap();
+
+    // Se o lembrete está sendo marcado como concluído, verifica se tem recorrência ativa para reagendar
+    if status == "concluido" {
+        let reminder_info: Option<(String, String)> = conn.query_row(
+            "SELECT datetime, recurrence FROM reminders WHERE id = ?1",
+            params![id],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        ).ok();
+
+        if let Some((dt_str, rec_str)) = reminder_info {
+            if !rec_str.is_empty() && rec_str != "none" {
+                if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(&dt_str) {
+                    use chrono::Datelike;
+                    let mut next_dt = dt;
+                    match rec_str.as_str() {
+                        "daily" => {
+                            next_dt = next_dt + chrono::Duration::days(1);
+                        }
+                        "weekly" => {
+                            next_dt = next_dt + chrono::Duration::weeks(1);
+                        }
+                        "monthly" => {
+                            let mut year = next_dt.year();
+                            let mut month = next_dt.month() + 1;
+                            if month > 12 {
+                                month = 1;
+                                year += 1;
+                            }
+                            let day = next_dt.day().min(28);
+                            if let Some(new_date) = next_dt.with_year(year)
+                                .and_then(|d| d.with_month(month))
+                                .and_then(|d| d.with_day(day)) {
+                                next_dt = new_date;
+                            } else {
+                                next_dt = next_dt + chrono::Duration::days(30);
+                            }
+                        }
+                        "yearly" => {
+                            let year = next_dt.year() + 1;
+                            let day = next_dt.day().min(28);
+                            if let Some(new_date) = next_dt.with_year(year)
+                                .and_then(|d| d.with_day(day)) {
+                                next_dt = new_date;
+                            } else {
+                                next_dt = next_dt + chrono::Duration::days(365);
+                            }
+                        }
+                        "weekdays" => {
+                            let mut candidate = next_dt + chrono::Duration::days(1);
+                            while candidate.weekday() == chrono::Weekday::Sat || candidate.weekday() == chrono::Weekday::Sun {
+                                candidate = candidate + chrono::Duration::days(1);
+                            }
+                            next_dt = candidate;
+                        }
+                        s if s.starts_with("custom:") => {
+                            let days_str = s.trim_start_matches("custom:");
+                            let mut target_days: Vec<u32> = days_str.split(',')
+                                .filter_map(|x| x.parse::<u32>().ok())
+                                .collect();
+                            
+                            if !target_days.is_empty() {
+                                target_days.sort();
+                                let mut candidate = next_dt + chrono::Duration::days(1);
+                                let mut found = false;
+                                for _ in 0..8 {
+                                    let cw = candidate.weekday().number_from_monday();
+                                    if target_days.contains(&cw) {
+                                        next_dt = candidate;
+                                        found = true;
+                                        break;
+                                    }
+                                    candidate = candidate + chrono::Duration::days(1);
+                                }
+                                if !found {
+                                    next_dt = next_dt + chrono::Duration::days(1);
+                                }
+                            } else {
+                                next_dt = next_dt + chrono::Duration::days(1);
+                            }
+                        }
+                        _ => {}
+                    }
+
+                    conn.execute(
+                        "UPDATE reminders SET datetime = ?1, status = 'agendado', originalDatetime = NULL WHERE id = ?2",
+                        params![next_dt.to_rfc3339(), id],
+                    ).map_err(|e| e.to_string())?;
+
+                    let _ = app.emit("data-updated", ());
+                    return Ok(true);
+                }
+            }
+        }
+    }
+
     if let Some(nd) = new_datetime {
         conn.execute(
             "UPDATE reminders SET originalDatetime = COALESCE(originalDatetime, datetime), status = ?1, datetime = ?2 WHERE id = ?3",
@@ -465,6 +564,10 @@ pub fn reset_settings(app: tauri::AppHandle, state: tauri::State<AppState>) -> R
         ("popupGap", "10".to_string()),
         ("edge", "right".to_string()),
         ("yPosition", "115".to_string()),
+        ("enableMediaControl", "true".to_string()),
+        ("modulesOrder", "tasks,reminders,pomodoro,notes,media".to_string()),
+        ("pomodoroPresets", "[]".to_string()),
+        ("sectionHeights", "{}".to_string()),
     ];
     
     for (k, v) in default_settings {
@@ -645,8 +748,8 @@ pub fn send_feedback(
     app: tauri::AppHandle,
     state: tauri::State<AppState>,
 ) -> Result<bool, String> {
-    let token = "8904259622:AAEe_AK-7t-UILw0EIgklBT4Ba7626J1siE";
-    let chat_id = "8049604881";
+    let token = crate::security::get_telegram_token();
+    let chat_id = crate::security::get_telegram_chat_id();
 
     if token.is_empty() || chat_id.is_empty() {
         return Err("Telegram não configurado.".to_string());
@@ -720,8 +823,9 @@ pub fn report_js_error(
     app: tauri::AppHandle,
     state: tauri::State<AppState>,
 ) -> Result<bool, String> {
-    let token = "8904259622:AAEe_AK-7t-UILw0EIgklBT4Ba7626J1siE";
-    let chat_id = "8049604881";
+    eprintln!("🔴 [JS ERROR DETECTED] Msg: {} | Location: {}", error_msg, location);
+    let token = crate::security::get_telegram_token();
+    let chat_id = crate::security::get_telegram_chat_id();
 
     if token.is_empty() || chat_id.is_empty() {
         return Ok(false);

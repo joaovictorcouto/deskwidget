@@ -4,8 +4,12 @@ use tauri::{Emitter, Manager};
 use tauri_plugin_autostart::ManagerExt;
 
 mod database;
+mod security;
+mod sync;
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_window_state::Builder::new().build())
         .plugin(tauri_plugin_os::init())
@@ -19,7 +23,6 @@ pub fn run() {
         }))
         .plugin(
             tauri_plugin_autostart::Builder::new()
-                .app_name("DeskWidget")
                 .args(["--minimized"])
                 .build()
         )
@@ -39,8 +42,8 @@ pub fn run() {
 
             let panic_app_handle = app.handle().clone();
             std::panic::set_hook(Box::new(move |panic_info| {
-                let token = "8904259622:AAEe_AK-7t-UILw0EIgklBT4Ba7626J1siE";
-                let chat_id = "8049604881";
+                let token = security::get_telegram_token();
+                let chat_id = security::get_telegram_chat_id();
                 if token.is_empty() || chat_id.is_empty() {
                     return;
                 }
@@ -121,7 +124,10 @@ pub fn run() {
                 }
             }
             if start_on_windows {
-                let _ = autostart_manager.enable();
+                match autostart_manager.enable() {
+                    Ok(_) => println!("🚀 [AUTOSTART] Inicialização automática com o Windows habilitada com sucesso."),
+                    Err(e) => eprintln!("🔴 [AUTOSTART ERROR] Falha ao habilitar inicialização automática: {:?}", e),
+                }
             } else {
                 let _ = autostart_manager.disable();
             }
@@ -134,11 +140,16 @@ pub fn run() {
             let restart_i = MenuItem::with_id(app, "restart", "Reiniciar", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&settings_i, &history_i, &restart_i, &quit_i])?;
 
-            let _tray = TrayIconBuilder::new()
+            let mut tray_builder = TrayIconBuilder::new()
                 .tooltip("DeskWidget")
-                .icon(app.default_window_icon().unwrap().clone())
                 .menu(&menu)
-                .show_menu_on_left_click(false)
+                .show_menu_on_left_click(false);
+
+            if let Some(icon) = app.default_window_icon() {
+                tray_builder = tray_builder.icon(icon.clone());
+            }
+
+            let _tray = tray_builder
                 .on_menu_event(move |app, event| match event.id.as_ref() {
                     "quit" => {
                         app.exit(0);
@@ -172,6 +183,66 @@ pub fn run() {
                     }
                 })
                 .build(app)?;
+
+            let mut is_licensed = false;
+            if let Ok(conn) = app.state::<database::AppState>().db.lock() {
+                if let Ok(license_key) = conn.query_row(
+                    "SELECT value FROM settings WHERE key = 'license_key'",
+                    [],
+                    |row| row.get::<_, String>(0)
+                ) {
+                    if security::verify_license(license_key).is_ok() {
+                        is_licensed = true;
+                    }
+                }
+            }
+
+            #[cfg(target_os = "windows")]
+            {
+                let app_handle = app.handle().clone();
+                std::thread::spawn(move || {
+                    // Inicializa o Windows Runtime (WinRT) nesta thread - OBRIGATÓRIO
+                    unsafe {
+                        use windows::Win32::System::WinRT::{RoInitialize, RO_INIT_MULTITHREADED};
+                        let _ = RoInitialize(RO_INIT_MULTITHREADED);
+                    }
+                    println!("MEDIA: SessionManager iniciado");
+
+                    // Força um estado inicial diferençado para garantir a primeira emissão de imediato
+                    let mut last_state = serde_json::json!({
+                        "title": "INIT_FORCE_STATE_XYZ",
+                        "artist": "",
+                        "is_playing": false,
+                        "app_name": "",
+                    });
+                    
+                    loop {
+                        let current_state = match get_media_state() {
+                            Some(state) => state,
+                            None => {
+                                let (volume, is_muted) = get_system_volume_info();
+                                serde_json::json!({
+                                    "title": "",
+                                    "artist": "",
+                                    "is_playing": false,
+                                    "app_name": "",
+                                    "app_icon": "",
+                                    "volume": volume,
+                                    "is_muted": is_muted,
+                                })
+                            }
+                        };
+                        
+                        if current_state != last_state {
+                            println!("MEDIA: Evento enviado -> {:?}", current_state);
+                            last_state = current_state.clone();
+                            let _ = app_handle.emit("media-state-updated", current_state);
+                        }
+                        
+                        std::thread::sleep(std::time::Duration::from_millis(1000));
+                    }
+                });
+            }
 
             if let Some(window) = app.get_webview_window("main") {
                 position_window(&app_handle, false, None, None, None, None, None);
@@ -207,6 +278,7 @@ pub fn run() {
             open_settings,
             open_history,
             close_window,
+            open_paywall,
             show_popup,
             pomodoro_action,
             get_positioner_margins,
@@ -215,6 +287,19 @@ pub fn run() {
             preview_appearance,
             download_update,
             execute_update,
+            security::get_hwid,
+            security::request_activation_otp,
+            security::verify_and_activate,
+            security::verify_license,
+            security::request_otp_by_email,
+            security::verify_email_otp_and_activate,
+            sync::sync_to_cloud,
+            sync::sync_from_cloud,
+            get_app_version_info,
+            trigger_media_command,
+            open_active_media_app,
+            get_media_volume,
+            set_media_volume,
         ]);
 
     builder
@@ -390,6 +475,7 @@ fn preview_edge(
 #[tauri::command]
 async fn open_settings(app: tauri::AppHandle) -> Result<(), String> {
     if let Some(w) = app.get_webview_window("settings") {
+        let _ = w.show();
         let _ = w.set_focus();
         return Ok(());
     }
@@ -409,13 +495,21 @@ async fn open_settings(app: tauri::AppHandle) -> Result<(), String> {
     .center()
     .build();
 
-    if let Ok(w) = window {
-        let app_handle = app.clone();
-        w.on_window_event(move |event| {
-            if let tauri::WindowEvent::Destroyed = event {
-                let _ = app_handle.emit("settings-closed", ());
-            }
-        });
+    match window {
+        Ok(w) => {
+            let app_handle = app.clone();
+            w.on_window_event(move |event| {
+                if let tauri::WindowEvent::Destroyed = event {
+                    let _ = app_handle.emit("settings-closed", ());
+                }
+            });
+            let _ = w.show();
+            let _ = w.set_focus();
+        }
+        Err(e) => {
+            eprintln!("🔴 [WINDOW ERROR] Falha ao criar janela de configurações: {:?}", e);
+            return Err(e.to_string());
+        }
     }
     Ok(())
 }
@@ -423,6 +517,7 @@ async fn open_settings(app: tauri::AppHandle) -> Result<(), String> {
 #[tauri::command]
 async fn open_history(app: tauri::AppHandle) -> Result<(), String> {
     if let Some(w) = app.get_webview_window("history") {
+        let _ = w.show();
         let _ = w.set_focus();
         return Ok(());
     }
@@ -441,13 +536,21 @@ async fn open_history(app: tauri::AppHandle) -> Result<(), String> {
     .center()
     .build();
 
-    if let Ok(w) = window {
-        let app_handle = app.clone();
-        w.on_window_event(move |event| {
-            if let tauri::WindowEvent::Destroyed = event {
-                let _ = app_handle.emit("history-closed", ());
-            }
-        });
+    match window {
+        Ok(w) => {
+            let app_handle = app.clone();
+            w.on_window_event(move |event| {
+                if let tauri::WindowEvent::Destroyed = event {
+                    let _ = app_handle.emit("history-closed", ());
+                }
+            });
+            let _ = w.show();
+            let _ = w.set_focus();
+        }
+        Err(e) => {
+            eprintln!("🔴 [WINDOW ERROR] Falha ao criar janela de histórico: {:?}", e);
+            return Err(e.to_string());
+        }
     }
     Ok(())
 }
@@ -455,6 +558,15 @@ async fn open_history(app: tauri::AppHandle) -> Result<(), String> {
 #[tauri::command]
 fn close_window(window: tauri::Window) {
     let _ = window.close();
+}
+
+#[tauri::command]
+fn open_paywall(window: tauri::Window) {
+    let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize {
+        width: 440.0,
+        height: 620.0,
+    }));
+    let _ = window.center();
 }
 
 #[tauri::command]
@@ -675,6 +787,9 @@ fn preview_appearance(settings: serde_json::Value, app: tauri::AppHandle) {
 async fn download_update(url: String, app: tauri::AppHandle) -> Result<(), String> {
     use std::io::{Read, Write};
 
+    // Validação estrita da URL de atualização no backend (impede injeções e ataques RCE)
+    security::validate_update_url(&url)?;
+
     let app_clone = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
         let temp_path = std::env::temp_dir().join("DeskWidget_Setup.exe");
@@ -766,5 +881,506 @@ fn execute_update(app: tauri::AppHandle) -> Result<(), String> {
 
     app.exit(0);
     Ok(())
+}
+
+#[tauri::command]
+fn get_app_version_info(app: tauri::AppHandle) -> serde_json::Value {
+    let name = app.package_info().name.clone();
+    let version = app.package_info().version.to_string();
+    let identifier = app.config().identifier.clone();
+    let is_beta = identifier.to_lowercase().contains("beta") || name.to_lowercase().contains("beta");
+    serde_json::json!({
+        "name": name,
+        "version": version,
+        "identifier": identifier,
+        "is_beta": is_beta
+    })
+}
+
+#[tauri::command]
+fn trigger_media_command(command: String, app: tauri::AppHandle) -> Result<serde_json::Value, String> {
+    #[cfg(target_os = "windows")]
+    {
+        use windows::Media::Control::{
+            GlobalSystemMediaTransportControlsSessionManager,
+            GlobalSystemMediaTransportControlsSessionPlaybackStatus,
+            GlobalSystemMediaTransportControlsSession,
+        };
+        
+        println!("MEDIA: Comando recebido -> \"{}\"", command);
+        
+        if let Ok(manager_op) = GlobalSystemMediaTransportControlsSessionManager::RequestAsync() {
+            if let Ok(manager) = manager_op.get() {
+                // Tenta obter a sessão de mídia de forma inteligente
+                let session_opt = if let Ok(s) = manager.GetCurrentSession() {
+                    Some(s)
+                } else if let Ok(sessions_list) = manager.GetSessions() {
+                    let mut found: Option<GlobalSystemMediaTransportControlsSession> = None;
+                    for s in sessions_list.into_iter() {
+                        if let Ok(playback_info) = s.GetPlaybackInfo() {
+                            if let Ok(status) = playback_info.PlaybackStatus() {
+                                if status == GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing {
+                                    found = Some(s);
+                                    break;
+                                } else if found.is_none() {
+                                    found = Some(s);
+                                }
+                            }
+                        }
+                    }
+                    found
+                } else {
+                    None
+                };
+
+                if let Some(session) = session_opt {
+                    match command.as_str() {
+                        "play" => {
+                            println!("MEDIA: Play executado");
+                            let _ = session.TryPlayAsync().map(|op| op.get());
+                        }
+                        "pause" => {
+                            println!("MEDIA: Pause executado");
+                            let _ = session.TryPauseAsync().map(|op| op.get());
+                        }
+                        "next" => {
+                            println!("MEDIA: Next executado");
+                            let _ = session.TrySkipNextAsync().map(|op| op.get());
+                        }
+                        "prev" => {
+                            println!("MEDIA: Prev executado");
+                            let _ = session.TrySkipPreviousAsync().map(|op| op.get());
+                        }
+                        "mute" => {
+                            println!("MEDIA: Mute executado");
+                            let script = "(New-Object -ComObject WScript.Shell).SendKeys([char]173)";
+                            let mut cmd = std::process::Command::new("powershell");
+                            cmd.args(&["-WindowStyle", "Hidden", "-NonInteractive", "-Command", script]);
+                            use std::os::windows::process::CommandExt;
+                            cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+                            let _ = cmd.spawn();
+                        }
+                        _ => {}
+                    }
+                } else if command == "mute" {
+                    println!("MEDIA: Mute executado (sem sessão de mídia ativa)");
+                    let script = "(New-Object -ComObject WScript.Shell).SendKeys([char]173)";
+                    let mut cmd = std::process::Command::new("powershell");
+                    cmd.args(&["-WindowStyle", "Hidden", "-NonInteractive", "-Command", script]);
+                    use std::os::windows::process::CommandExt;
+                    cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+                    let _ = cmd.spawn();
+                }
+            }
+        }
+
+        let state = match get_media_state() {
+            Some(state) => state,
+            None => serde_json::json!({
+                "title": "",
+                "artist": "",
+                "is_playing": false,
+                "app_name": "",
+            })
+        };
+        
+        let _ = app.emit("media-state-updated", state.clone());
+        return Ok(state);
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let state = serde_json::json!({
+            "title": "Mídia",
+            "artist": "Mock",
+            "is_playing": command == "play",
+            "app_name": ""
+        });
+        let _ = app.emit("media-state-updated", state.clone());
+        Ok(state)
+    }
+}
+
+#[tauri::command]
+fn open_active_media_app(app_name: String) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        println!("MEDIA: Comando de foco recebido para: \"{}\"", app_name);
+        
+        let app_name_lower = app_name.to_lowercase();
+        let proc_name = match app_name_lower.as_str() {
+            "spotify" => "Spotify",
+            "chrome" => "chrome",
+            "edge" | "msedge" => "msedge",
+            "brave" => "brave",
+            "opera" => "opera",
+            "firefox" => "firefox",
+            "comet" => "comet",
+            other => other,
+        };
+
+        // Script do PowerShell para focar e restaurar a janela se minimizada
+        let script = format!(
+            "Add-Type -TypeDefinition @\"\n\
+            using System;\n\
+            using System.Runtime.InteropServices;\n\
+            public class WinUtil {{\n\
+                [DllImport(\"user32.dll\")]\n\
+                public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);\n\
+                [DllImport(\"user32.dll\")]\n\
+                public static extern bool SetForegroundWindow(IntPtr hWnd);\n\
+                [DllImport(\"user32.dll\")]\n\
+                public static extern bool IsIconic(IntPtr hWnd);\n\
+            }}\n\
+            \"@ -ErrorAction SilentlyContinue;\n\
+            $procs = Get-Process -Name '{proc_name}' -ErrorAction SilentlyContinue;\n\
+            $focused = $false;\n\
+            if ($procs) {{\n\
+                foreach ($p in $procs) {{\n\
+                    $hwnd = $p.MainWindowHandle;\n\
+                    if ($hwnd -ne [IntPtr]::Zero) {{\n\
+                        if ([WinUtil]::IsIconic($hwnd)) {{\n\
+                            [WinUtil]::ShowWindow($hwnd, 9);\n\
+                        }} else {{\n\
+                            [WinUtil]::ShowWindow($hwnd, 5);\n\
+                        }}\n\
+                        [WinUtil]::SetForegroundWindow($hwnd);\n\
+                        $focused = $true;\n\
+                        break;\n\
+                    }}\n\
+                }}\n\
+            }}\n\
+            if (-not $focused) {{\n\
+                $wshell = New-Object -ComObject WScript.Shell;\n\
+                $wshell.AppActivate('{proc_name}');\n\
+            }}",
+            proc_name = proc_name.replace("'", "''")
+        );
+
+        let mut cmd = std::process::Command::new("powershell");
+        cmd.args(&["-WindowStyle", "Hidden", "-NonInteractive", "-Command", &script]);
+        
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        
+        let _ = cmd.spawn();
+        Ok(())
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Ok(())
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn get_system_volume_info() -> (i32, bool) {
+    let script = "Add-Type -TypeDefinition @\"\n\
+    using System;\n\
+    using System.Runtime.InteropServices;\n\
+    public class AudioManager {\n\
+        [Guid(\"5CDF2C82-841E-4546-9722-0CF74078229A\"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]\n\
+        interface IAudioEndpointVolume {\n\
+            int RegisterControlChangeNotify(IntPtr pNotify);\n\
+            int UnregisterControlChangeNotify(IntPtr pNotify);\n\
+            int GetChannelCount(out uint pnChannelCount);\n\
+            int SetMasterVolumeLevel(float fLevelDB, ref Guid pguidEventContext);\n\
+            int SetMasterVolumeLevelScalar(float fLevel, ref Guid pguidEventContext);\n\
+            int GetMasterVolumeLevel(out float pfLevelDB);\n\
+            int GetMasterVolumeLevelScalar(out float pfLevel);\n\
+            int SetChannelVolumeLevel(uint nChannel, float fLevelDB, ref Guid pguidEventContext);\n\
+            int SetChannelVolumeLevelScalar(uint nChannel, float fLevel, ref Guid pguidEventContext);\n\
+            int GetChannelVolumeLevel(uint nChannel, out float pfLevelDB);\n\
+            int GetChannelVolumeLevelScalar(uint nChannel, out float pfLevel);\n\
+            int SetMute([MarshalAs(UnmanagedType.Bool)] bool bMute, ref Guid pguidEventContext);\n\
+            int GetMute(out bool pbMute);\n\
+        }\n\
+        [Guid(\"D666063F-1587-4E43-81F1-B948E807363F\"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]\n\
+        interface IMMDevice {\n\
+            int Activate(ref Guid iid, int dwClsContext, IntPtr pActivationParams, [MarshalAs(UnmanagedType.IUnknown)] out object ppInterface);\n\
+        }\n\
+        [Guid(\"A95664D2-9614-4F35-A746-DE8DB63617E6\"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]\n\
+        interface IMMDeviceEnumerator {\n\
+            int EnumAudioEndpoints(int dataFlow, int dwStateMask, out IntPtr ppDevices);\n\
+            int GetDefaultAudioEndpoint(int dataFlow, int role, out IMMDevice ppDevice);\n\
+        }\n\
+        [ComImport, Guid(\"BCDE0395-E52F-467C-8E3D-C4579291692E\")] class MMDeviceEnumerator { }\n\
+        public static string GetVolumeInfo() {\n\
+            try {\n\
+                IMMDeviceEnumerator enumerator = (IMMDeviceEnumerator)(new MMDeviceEnumerator());\n\
+                IMMDevice speakers;\n\
+                enumerator.GetDefaultAudioEndpoint(0, 1, out speakers);\n\
+                object o;\n\
+                Guid IID_IAudioEndpointVolume = new Guid(\"5CDF2C82-841E-4546-9722-0CF74078229A\");\n\
+                speakers.Activate(ref IID_IAudioEndpointVolume, 23, IntPtr.Zero, out o);\n\
+                IAudioEndpointVolume volume = (IAudioEndpointVolume)o;\n\
+                float level;\n\
+                volume.GetMasterVolumeLevelScalar(out level);\n\
+                bool muted;\n\
+                volume.GetMute(out muted);\n\
+                return \"{\\\"volume\\\":\" + (int)Math.Round(level * 100) + \",\\\"is_muted\\\":\" + (muted ? \"true\" : \"false\") + \"}\";\n\
+            } catch { return \"{\\\"volume\\\":50,\\\"is_muted\\\":false}\"; }\n\
+        }\n\
+    }\n\
+    \"@ -ErrorAction SilentlyContinue;\n\
+    [AudioManager]::GetVolumeInfo()";
+
+    let mut cmd = std::process::Command::new("powershell");
+    cmd.args(&["-WindowStyle", "Hidden", "-NonInteractive", "-Command", script]);
+
+    use std::os::windows::process::CommandExt;
+    cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+
+    if let Ok(output) = cmd.output() {
+        if output.status.success() {
+            let out_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&out_str) {
+                let volume = json["volume"].as_i64().unwrap_or(50) as i32;
+                let is_muted = json["is_muted"].as_bool().unwrap_or(false);
+                return (volume, is_muted);
+            }
+        }
+    }
+    (50, false)
+}
+
+#[tauri::command]
+fn get_media_volume() -> Result<serde_json::Value, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let (volume, is_muted) = get_system_volume_info();
+        return Ok(serde_json::json!({
+            "volume": volume,
+            "is_muted": is_muted,
+        }));
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Ok(serde_json::json!({
+            "volume": 50,
+            "is_muted": false,
+        }))
+    }
+}
+
+#[tauri::command]
+fn set_media_volume(level: i32) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        let script = format!(
+            "Add-Type -TypeDefinition @\"\n\
+            using System;\n\
+            using System.Runtime.InteropServices;\n\
+            public class AudioManager {{\n\
+                [Guid(\"5CDF2C82-841E-4546-9722-0CF74078229A\"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]\n\
+                interface IAudioEndpointVolume {{\n\
+                    int RegisterControlChangeNotify(IntPtr pNotify);\n\
+                    int UnregisterControlChangeNotify(IntPtr pNotify);\n\
+                    int GetChannelCount(out uint pnChannelCount);\n\
+                    int SetMasterVolumeLevel(float fLevelDB, ref Guid pguidEventContext);\n\
+                    int SetMasterVolumeLevelScalar(float fLevel, ref Guid pguidEventContext);\n\
+                }}\n\
+                [Guid(\"D666063F-1587-4E43-81F1-B948E807363F\"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]\n\
+                interface IMMDevice {{\n\
+                    int Activate(ref Guid iid, int dwClsContext, IntPtr pActivationParams, [MarshalAs(UnmanagedType.IUnknown)] out object ppInterface);\n\
+                }}\n\
+                [Guid(\"A95664D2-9614-4F35-A746-DE8DB63617E6\"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]\n\
+                interface IMMDeviceEnumerator {{\n\
+                    int EnumAudioEndpoints(int dataFlow, int dwStateMask, out IntPtr ppDevices);\n\
+                    int GetDefaultAudioEndpoint(int dataFlow, int role, out IMMDevice ppDevice);\n\
+                }}\n\
+                [ComImport, Guid(\"BCDE0395-E52F-467C-8E3D-C4579291692E\")] class MMDeviceEnumerator {{ }}\n\
+                public static void SetVolume(int level) {{\n\
+                    try {{\n\
+                        IMMDeviceEnumerator enumerator = (IMMDeviceEnumerator)(new MMDeviceEnumerator());\n\
+                        IMMDevice speakers;\n\
+                        enumerator.GetDefaultAudioEndpoint(0, 1, out speakers);\n\
+                        object o;\n\
+                        Guid IID_IAudioEndpointVolume = new Guid(\"5CDF2C82-841E-4546-9722-0CF74078229A\");\n\
+                        speakers.Activate(ref IID_IAudioEndpointVolume, 23, IntPtr.Zero, out o);\n\
+                        IAudioEndpointVolume volume = (IAudioEndpointVolume)o;\n\
+                        Guid g = Guid.Empty;\n\
+                        volume.SetMasterVolumeLevelScalar((float)level / 100, ref g);\n\
+                    }} catch {{}}\n\
+                }}\n\
+            }}\n\
+            \"@ -ErrorAction SilentlyContinue;\n\
+            [AudioManager]::SetVolume({level})",
+            level = level
+        );
+
+        let mut cmd = std::process::Command::new("powershell");
+        cmd.args(&["-WindowStyle", "Hidden", "-NonInteractive", "-Command", &script]);
+
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+
+        let _ = cmd.spawn();
+        Ok(())
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Ok(())
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn get_app_icon_base64(app_name: &str) -> Option<String> {
+    let app_name_lower = app_name.to_lowercase();
+    let proc_name = match app_name_lower.as_str() {
+        "spotify" => "Spotify",
+        "chrome" => "chrome",
+        "edge" | "msedge" => "msedge",
+        "brave" => "brave",
+        "opera" => "opera",
+        "firefox" => "firefox",
+        "comet" => "comet",
+        other => other,
+    };
+
+    // Script do PowerShell para extrair o ícone do executável e retornar em Base64 PNG
+    let script = format!(
+        "[void][System.Reflection.Assembly]::LoadWithPartialName('System.Drawing'); \
+         $proc = Get-Process -Name '{proc_name}' -ErrorAction SilentlyContinue | Where-Object {{ $_.Path }} | Select-Object -First 1; \
+         if ($proc) {{ \
+             $path = $proc.Path; \
+             if (Test-Path $path) {{ \
+                 $icon = [System.Drawing.Icon]::ExtractAssociatedIcon($path); \
+                 $bitmap = $icon.ToBitmap(); \
+                 $stream = New-Object System.IO.MemoryStream; \
+                 $bitmap.Save($stream, [System.Drawing.Imaging.ImageFormat]::Png); \
+                 $bytes = $stream.ToArray(); \
+                 $base64 = [Convert]::ToBase64String($bytes); \
+                 $stream.Close(); \
+                 $icon.Dispose(); \
+                 $bitmap.Dispose(); \
+                 Write-Output \"data:image/png;base64,$base64\"; \
+             }} \
+         }}",
+        proc_name = proc_name.replace("'", "''")
+    );
+
+    let mut cmd = std::process::Command::new("powershell");
+    cmd.args(&["-WindowStyle", "Hidden", "-NonInteractive", "-Command", &script]);
+
+    use std::os::windows::process::CommandExt;
+    cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+
+    if let Ok(output) = cmd.output() {
+        if output.status.success() {
+            let base64_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if base64_str.starts_with("data:image/png;base64,") {
+                return Some(base64_str);
+            }
+        }
+    }
+    None
+}
+
+#[cfg(target_os = "windows")]
+fn get_media_state() -> Option<serde_json::Value> {
+    use windows::Media::Control::{
+        GlobalSystemMediaTransportControlsSessionManager,
+        GlobalSystemMediaTransportControlsSessionPlaybackStatus,
+        GlobalSystemMediaTransportControlsSession,
+    };
+    
+    let manager = GlobalSystemMediaTransportControlsSessionManager::RequestAsync().ok()?.get().ok()?;
+    
+    // Tenta obter a sessão de mídia principal, com fallback inteligente para a lista geral
+    let session: GlobalSystemMediaTransportControlsSession = match manager.GetCurrentSession() {
+        Ok(s) => {
+            println!("MEDIA: Sessão encontrada (Principal)");
+            s
+        }
+        Err(_) => {
+            let sessions_list = manager.GetSessions().ok()?;
+            let mut found_session: Option<GlobalSystemMediaTransportControlsSession> = None;
+            
+            for s in sessions_list.into_iter() {
+                if let Ok(playback_info) = s.GetPlaybackInfo() {
+                    if let Ok(status) = playback_info.PlaybackStatus() {
+                        if status == GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing {
+                            found_session = Some(s);
+                            break;
+                        } else if found_session.is_none() {
+                            found_session = Some(s);
+                        }
+                    }
+                }
+            }
+            
+            if found_session.is_some() {
+                println!("MEDIA: Sessão encontrada (Fallback da Lista Geral)");
+            }
+            found_session?
+        }
+    };
+    
+    let playback_info = session.GetPlaybackInfo().ok()?;
+    let status = playback_info.PlaybackStatus().ok()?;
+    let is_playing = status == GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing;
+    
+    let properties = session.TryGetMediaPropertiesAsync().ok()?.get().ok()?;
+    let title = properties.Title().map(|s| s.to_string()).unwrap_or_default();
+    let artist = properties.Artist().map(|s| s.to_string()).unwrap_or_default();
+    
+    // Filtro de segurança: se o título estiver vazio, não exibe
+    if title.is_empty() {
+        return None;
+    }
+    
+    println!("MEDIA: Título recebido -> \"{}\" por \"{}\"", title, artist);
+    
+    let app_id = session.SourceAppUserModelId().map(|s| s.to_string()).unwrap_or_default();
+    let app_id_lower = app_id.to_lowercase();
+    let app_name = if app_id_lower.contains("spotify") {
+        println!("MEDIA: Spotify detectado");
+        "spotify".to_string()
+    } else if app_id_lower.contains("chrome") {
+        println!("MEDIA: Chrome detectado");
+        "chrome".to_string()
+    } else if app_id_lower.contains("msedge") || app_id_lower.contains("edge") {
+        println!("MEDIA: Edge detectado");
+        "edge".to_string()
+    } else if app_id_lower.contains("brave") {
+        println!("MEDIA: Brave detectado");
+        "brave".to_string()
+    } else if app_id_lower.contains("opera") {
+        println!("MEDIA: Opera detectado");
+        "opera".to_string()
+    } else if app_id_lower.contains("firefox") {
+        println!("MEDIA: Firefox detectado");
+        "firefox".to_string()
+    } else if app_id_lower.contains("comet") {
+        println!("MEDIA: Comet detectado");
+        "comet".to_string()
+    } else {
+        let clean = app_id.split('\\').last().unwrap_or(&app_id);
+        let clean = clean.split('/').last().unwrap_or(clean);
+        let clean = clean.strip_suffix(".exe").unwrap_or(clean);
+        println!("MEDIA: Aplicativo desconhecido detectado ({})", clean);
+        clean.to_string()
+    };
+    
+    let app_icon = get_app_icon_base64(&app_name).unwrap_or_default();
+    let (volume, is_muted) = get_system_volume_info();
+    
+    Some(serde_json::json!({
+        "title": title,
+        "artist": artist,
+        "is_playing": is_playing,
+        "app_name": app_name,
+        "app_icon": app_icon,
+        "volume": volume,
+        "is_muted": is_muted,
+    }))
+}
+
+#[cfg(not(target_os = "windows"))]
+fn get_media_state() -> Option<serde_json::Value> {
+    None
 }
 

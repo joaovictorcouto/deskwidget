@@ -3,6 +3,7 @@ import Widget from './Widget';
 import Settings from './Settings';
 import History from './History';
 import Popup from './Popup';
+import Paywall from './components/Paywall';
 
 const LIGHT_COLOR_MAP = {
   '#5c85ff': '#3b5bdb', // Rich Blue
@@ -15,10 +16,34 @@ const LIGHT_COLOR_MAP = {
 function App() {
   const [route, setRoute] = useState(window.location.hash);
   const [themeColor, setThemeColor] = useState('#5c85ff');
+  const [licensed, setLicensed] = useState(true);
+  const [checkingLicense, setCheckingLicense] = useState(false);
+
+  useEffect(() => {
+    const checkLicenseStatus = async () => {
+      try {
+        if (window.api?.getSettings) {
+          const s = await window.api.getSettings();
+          if (s && s.license_key && window.api.verifyLicense) {
+            const isValid = await window.api.verifyLicense(s.license_key);
+            if (isValid) {
+              setLicensed(true);
+            }
+          }
+        }
+      } catch (e) {
+        console.error('Falha na validação automática da licença:', e);
+      } finally {
+        setCheckingLicense(false);
+      }
+    };
+    checkLicenseStatus();
+  }, []);
 
   const loadTheme = async () => {
     if (window.api) {
       const s = await window.api.getSettings();
+      if (!s) return;
       let color = s.themeColor || '#5c85ff';
       const isLight = s.theme === 'claro';
       if (isLight && LIGHT_COLOR_MAP[color]) {
@@ -74,10 +99,27 @@ function App() {
     };
   }, []);
 
+  const handleLicenseSuccess = () => {
+    setLicensed(true);
+    window.location.hash = '#/';
+    if (window.api?.expandWindow) {
+      window.api.expandWindow();
+    }
+  };
+
   let Component = <Widget />;
-  if (route === '#/settings') Component = <Settings />;
-  else if (route === '#/history') Component = <History />;
-  else if (route.startsWith('#/popup')) Component = <Popup />;
+  const isMainWindow = route === '' || route === '#/';
+
+  if (route === '#/paywall') {
+    window.location.hash = '#/';
+    Component = <Widget />;
+  } else if (route === '#/settings') {
+    Component = <Settings />;
+  } else if (route === '#/history') {
+    Component = <History />;
+  } else if (route.startsWith('#/popup')) {
+    Component = <Popup />;
+  }
 
   return (
     <>

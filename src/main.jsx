@@ -48,6 +48,21 @@ window.api = {
   previewEdge: (tempEdge) => invoke('preview_edge', { tempEdge, availX: window.screen.availLeft || 0, availY: window.screen.availTop || 0, availWidth: window.screen.availWidth, availHeight: window.screen.availHeight }),
   downloadUpdate: (url) => invoke('download_update', { url }),
   executeUpdate: () => invoke('execute_update'),
+  getHwid: () => invoke('get_hwid'),
+  verifyLicense: (licenseData) => invoke('verify_license', { licenseData }),
+  requestActivationOtp: (licenseData) => invoke('request_activation_otp', { licenseData }),
+  verifyAndActivate: (code, licenseData) => invoke('verify_and_activate', { code, licenseData }),
+  requestOtpByEmail: (email) => invoke('request_otp_by_email', { email }),
+  verifyEmailOtpAndActivate: (email, code) => invoke('verify_email_otp_and_activate', { email, code }),
+  getAppVersionInfo: () => invoke('get_app_version_info'),
+  openPaywall: () => invoke('open_paywall'),
+  syncToCloud: () => invoke('sync_to_cloud'),
+  syncFromCloud: () => invoke('sync_from_cloud'),
+  triggerMediaCommand: (command) => invoke('trigger_media_command', { command }),
+  openActiveMediaApp: (appName) => invoke('open_active_media_app', { appName }),
+  setMediaVolume: (level) => invoke('set_media_volume', { level }),
+  getMediaVolume: () => invoke('get_media_volume'),
+  
   
   // Event Listeners simulados (ainda precisam do backend emitindo)
   onSettingsUpdated: (cb) => { const u = listen('settings-updated', cb); return () => u.then(f => f()); },
@@ -62,6 +77,7 @@ window.api = {
   onPositionerMetrics: (cb) => { const u = listen('positioner-metrics', (ev) => cb(ev.payload)); return () => u.then(f => f()); },
   onUpdateDownloadProgress: (cb) => { const u = listen('update-download-progress', (ev) => cb(ev.payload)); return () => u.then(f => f()); },
   onPopupOpened: (cb) => { const u = listen('popup-opened', (ev) => cb(ev.payload)); return () => u.then(f => f()); },
+  onMediaStateUpdated: (cb) => { const u = listen('media-state-updated', (ev) => cb(ev.payload)); return () => u.then(f => f()); },
 };
 
 // Capturador automático de exceções globais do JavaScript

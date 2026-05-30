@@ -6,7 +6,7 @@
  * - Puxador: A pequena barra que o usuário clica e arrasta para mover a posição vertical.
  */
 import React, { useState, useEffect, useRef } from 'react';
-import { Settings, CheckCircle, Bell, ChevronDown, ChevronRight, GripVertical, Clock, Tag, X, Sun, Moon, ArrowUp, AlignLeft } from 'lucide-react';
+import { Settings, CheckCircle, Bell, ChevronDown, ChevronRight, GripVertical, Clock, Tag, X, Sun, Moon, ArrowUp, AlignLeft, Volume2, VolumeX, Play, Pause, SkipForward, SkipBack, Music, HelpCircle, Trash2 } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import CustomConfirm from './components/CustomConfirm';
 
@@ -56,6 +56,30 @@ function Widget() {
   const [selectedTaskTag, setSelectedTaskTag] = useState('');
   const [showTaskTagMenu, setShowTaskTagMenu] = useState(false);
   const taskTagMenuRef = useRef(null);
+  const [taskTagMenuDirection, setTaskTagMenuDirection] = useState('down'); // 'down' or 'up'
+  const [sectionHeights, setSectionHeights] = useState({ tasks: 165, reminders: 195, pomodoro: 100, notes: 120, media: 30 });
+  const [isResizing, setIsResizing] = useState(false);
+  const [activeDivider, setActiveDivider] = useState(null);
+  const startYRef = useRef(0);
+  const startHeightsRef = useRef({});
+  const [pomodoroPresets, setPomodoroPresets] = useState([]);
+  const [showPomodoroPresetsModal, setShowPomodoroPresetsModal] = useState(false);
+  const [newPresetName, setNewPresetName] = useState('');
+  const [newPresetDuration, setNewPresetDuration] = useState('');
+  const [newPresetBreakDuration, setNewPresetBreakDuration] = useState('');
+  const [editingPresetId, setEditingPresetId] = useState(null);
+  const [editingPresetName, setEditingPresetName] = useState('');
+  const [editingPresetFocus, setEditingPresetFocus] = useState('');
+  const [editingPresetBreak, setEditingPresetBreak] = useState('');
+  const [mediaTitle, setMediaTitle] = useState('');
+  const [mediaArtist, setMediaArtist] = useState('');
+  const [mediaPlaying, setMediaPlaying] = useState(false);
+  const [mediaApp, setMediaApp] = useState('');
+  const [mediaAppIcon, setMediaAppIcon] = useState('');
+  const [mediaMuted, setMediaMuted] = useState(false);
+  const [volume, setVolume] = useState(50);
+  const [showVolumeSlider, setShowVolumeSlider] = useState(false);
+  const volumeHoverTimeout = useRef(null);
   const [showTagManager, setShowTagManager] = useState(false);
   const [newTagInputVal, setNewTagInputVal] = useState('');
   const [newTaskTagInputVal, setNewTaskTagInputVal] = useState('');
@@ -63,9 +87,23 @@ function Widget() {
   const [managerNewTagColor, setManagerNewTagColor] = useState('hsl(263, 90%, 50%)');
 
   // Estado para CustomConfirm
-  const [confirmConfig, setConfirmConfig] = useState({ isOpen: false, message: '', onConfirm: null });
+  const [confirmConfig, setConfirmConfig] = useState({ isOpen: false, message: '', onConfirm: null, title: 'CONFIRMAÇÃO', isAlert: false });
+
+  const showAlert = (message, title = 'AVISO') => {
+    setConfirmConfig({
+      isOpen: true,
+      message,
+      title,
+      isAlert: true,
+      onConfirm: () => setConfirmConfig({ isOpen: false, message: '', onConfirm: null, title: 'CONFIRMAÇÃO', isAlert: false }),
+      onCancel: null
+    });
+  };
+
+  const [hideDefaultPresets, setHideDefaultPresets] = useState(localStorage.getItem('deskwidget_hide_default_presets') === 'true');
 
   // Estados de Atualização (Updater)
+  const [isBetaApp, setIsBetaApp] = useState(false);
   const CURRENT_VERSION = '1.2.3.4';
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [updateVersion, setUpdateVersion] = useState('');
@@ -104,24 +142,40 @@ function Widget() {
     }
   };
 
-  const checkUpdates = async (silent = true) => {
+  const checkUpdates = async (silent = true, isBetaParam = false) => {
     try {
-      const response = await fetch('https://api.github.com/repos/joaovictorcouto/deskwidget/releases/latest');
-      if (!response.ok) return;
-      const data = await response.json();
-      const latestVer = data.tag_name.replace('v', '');
-      
+      let latestVer = '';
+      let downloadUrl = '';
+      let releaseData = null;
+
+      if (isBetaParam) {
+        const response = await fetch('https://api.github.com/repos/joaovictorcouto/deskwidget/releases');
+        if (!response.ok) return;
+        const releases = await response.json();
+        if (!releases || releases.length === 0) return;
+        // Filtra para encontrar o release mais recente com prerelease === true
+        const betaRelease = releases.find(r => r.prerelease === true);
+        if (!betaRelease) return; // Nenhuma versão beta nova no GitHub
+
+        releaseData = betaRelease;
+        latestVer = betaRelease.tag_name.replace('v', '');
+      } else {
+        const response = await fetch('https://api.github.com/repos/joaovictorcouto/deskwidget/releases/latest');
+        if (!response.ok) return;
+        releaseData = await response.json();
+        latestVer = releaseData.tag_name.replace('v', '');
+      }
+
       const isNewer = compareVersions(latestVer, CURRENT_VERSION) > 0;
       if (isNewer) {
         setUpdateVersion(latestVer);
         setUpdateAvailable(true);
         
-        let downloadUrl = '';
-        const exeAsset = data.assets.find(asset => asset.name.endsWith('.exe') || asset.name.includes('setup'));
+        const exeAsset = releaseData.assets.find(asset => asset.name.endsWith('.exe') || asset.name.includes('setup'));
         if (exeAsset) {
           downloadUrl = exeAsset.browser_download_url;
         } else {
-          downloadUrl = data.assets[0]?.browser_download_url || data.html_url;
+          downloadUrl = releaseData.assets[0]?.browser_download_url || releaseData.html_url;
         }
         setUpdateUrl(downloadUrl);
         
@@ -191,7 +245,7 @@ function Widget() {
     } catch (err) {
       console.error(err);
       setIsDownloading(false);
-      alert('Erro ao baixar atualização: ' + err.message);
+      showAlert('Erro ao baixar atualização: ' + err.message);
     }
   };
 
@@ -214,8 +268,20 @@ function Widget() {
   };
 
   useEffect(() => {
-    // Checagem silenciosa ao inicializar
-    checkUpdates(true);
+    const initApp = async () => {
+      let beta = false;
+      if (window.api?.getAppVersionInfo) {
+        try {
+          const info = await window.api.getAppVersionInfo();
+          beta = info.is_beta;
+          setIsBetaApp(info.is_beta);
+        } catch (e) {
+          console.error("Erro ao obter versão do app do Rust:", e);
+        }
+      }
+      checkUpdates(true, beta);
+    };
+    initApp();
   }, []);
 
   useEffect(() => {
@@ -282,6 +348,49 @@ function Widget() {
           setSavedTags(JSON.parse(s.savedTags));
         } catch(e) {}
       }
+      if (s.sectionHeights) {
+        try {
+          const parsed = JSON.parse(s.sectionHeights);
+          setSectionHeights(prev => ({ ...prev, ...parsed }));
+        } catch(e) {}
+      }
+      let loadedPresets = [];
+      let needToSeed = false;
+      if (s.pomodoroPresets) {
+        try {
+          loadedPresets = JSON.parse(s.pomodoroPresets);
+          if (!Array.isArray(loadedPresets) || loadedPresets.length === 0) {
+            needToSeed = true;
+          } else {
+            // Auto-recupera o clássico de 25min/5min caso esteja faltando
+            const hasDefault1 = loadedPresets.some(p => p.id === 'default-1');
+            if (!hasDefault1) {
+              loadedPresets.unshift({ id: 'default-1', name: 'Clássico Pomodoro', duration: 25, breakDuration: 5 });
+              if (window.api) {
+                window.api.updateSetting('pomodoroPresets', JSON.stringify(loadedPresets));
+              }
+            }
+          }
+        } catch(e) {
+          needToSeed = true;
+        }
+      } else {
+        needToSeed = true;
+      }
+
+      if (needToSeed) {
+        loadedPresets = [
+          { id: 'default-1', name: 'Clássico Pomodoro', duration: 25, breakDuration: 5 },
+          { id: 'default-2', name: 'Foco Curto', duration: 15, breakDuration: 3 },
+          { id: 'default-3', name: 'Trabalho Longo', duration: 50, breakDuration: 10 },
+          { id: 'default-4', name: 'Estudo Intenso', duration: 45, breakDuration: 15 },
+          { id: 'default-5', name: 'Super Produtividade', duration: 90, breakDuration: 20 }
+        ];
+        if (window.api) {
+          await window.api.updateSetting('pomodoroPresets', JSON.stringify(loadedPresets));
+        }
+      }
+      setPomodoroPresets(loadedPresets);
       
       // Extrair tags das tarefas carregadas caso haja novas
       if (!isDeletingTagRef.current) {
@@ -445,6 +554,8 @@ function Widget() {
       });
     }
 
+    let removeMediaListener;
+
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
         if (confirmConfig.isOpen) {
@@ -482,10 +593,51 @@ function Widget() {
       if (removePopupCloseListener) removePopupCloseListener();
       if (removeForceExpand) removeForceExpand();
       if (removePreviewListener) removePreviewListener();
+      if (removeMediaListener) removeMediaListener();
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, [isExpanded, settings.delay, confirmConfig.isOpen, showTagManager, showTagMenu, showTaskTagMenu]);
   
+  useEffect(() => {
+    let removeMediaListener;
+    if (window.api?.onMediaStateUpdated) {
+      removeMediaListener = window.api.onMediaStateUpdated((payload) => {
+        console.log("🎵 [FRONTEND MEDIA] Evento recebido via window.api:", payload);
+        if (payload) {
+          setMediaTitle(payload.title || '');
+          setMediaArtist(payload.artist || '');
+          setMediaPlaying(payload.is_playing || false);
+          setMediaApp(payload.app_name || '');
+          setMediaAppIcon(payload.app_icon || '');
+          if (payload.volume !== undefined) {
+            setVolume(payload.volume);
+          }
+          if (payload.is_muted !== undefined) {
+            setMediaMuted(payload.is_muted);
+          }
+        }
+      });
+      console.log("🎵 [FRONTEND MEDIA] Listener via window.api registrado com sucesso!");
+    }
+    return () => {
+      if (removeMediaListener) {
+        removeMediaListener();
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (window.api?.getMediaVolume) {
+      window.api.getMediaVolume().then((res) => {
+        if (res && typeof res === 'object') {
+          if (res.volume !== undefined) setVolume(res.volume);
+          if (res.is_muted !== undefined) setMediaMuted(res.is_muted);
+        } else if (typeof res === 'number') {
+          setVolume(res);
+        }
+      }).catch(console.error);
+    }
+  }, []);
   useEffect(() => {
     let interval = null;
     if (pomodoroStatus === 'running' || pomodoroStatus === 'break') {
@@ -646,8 +798,9 @@ function Widget() {
     
     const deltaY = e.screenY - dragStartMouseY.current;
     let newYPos = dragStartYPos.current + deltaY;
-    if (newYPos < 52) newYPos = 52; // Limite superior ajustado (rail começa no 50px)
-    if (newYPos > window.innerHeight - 192) newYPos = window.innerHeight - 192; // Limite inferior ajustado
+    
+    if (newYPos < 46) newYPos = 46;
+    if (newYPos > window.innerHeight - 180) newYPos = window.innerHeight - 180;
     
     currentYPosRef.current = newYPos;
     setYPos(newYPos);
@@ -800,7 +953,7 @@ function Widget() {
 
     const exists = savedTags.some(t => t.name.toLowerCase() === trimmedNew.toLowerCase());
     if (exists) {
-      alert("Uma etiqueta com este nome já existe.");
+      showAlert("Uma etiqueta com este nome já existe.");
       return;
     }
 
@@ -836,7 +989,7 @@ function Widget() {
 
     const exists = savedTags.some(t => t.name.toLowerCase() === trimmed.toLowerCase());
     if (exists) {
-      alert("Uma etiqueta com este nome já existe.");
+      showAlert("Uma etiqueta com este nome já existe.");
       return;
     }
 
@@ -909,6 +1062,15 @@ function Widget() {
   const getSortedPendingTasks = () => {
     let pt = tasks.filter(t => !t.completed);
     switch (taskSortOrder) {
+      case 'tag':
+        return pt.sort((a, b) => {
+          const tagA = a.tag || '';
+          const tagB = b.tag || '';
+          if (tagA === tagB) return a.position - b.position;
+          if (tagA === '') return 1;
+          if (tagB === '') return -1;
+          return tagA.localeCompare(tagB);
+        });
       case 'newest_top':
         return pt.sort((a, b) => b.id - a.id);
       case 'newest_bottom':
@@ -950,6 +1112,190 @@ function Widget() {
     return `${day}/${month} (${weekDays[date.getDay()]})`;
   };
 
+  // ================= DIVISÓRIAS REDIMENSIONÁVEIS =================
+  const handleDividerDoubleClick = async (dividerKey) => {
+    const [prevMod, nextMod] = dividerKey.split('-');
+    const defaultHeights = { tasks: 165, reminders: 195, pomodoro: 100, notes: 120, media: 30 };
+    
+    setSectionHeights(prev => {
+      const updated = {
+        ...prev,
+        [prevMod]: defaultHeights[prevMod] || 150,
+        [nextMod]: defaultHeights[nextMod] || 150
+      };
+      
+      if (window.api) {
+        window.api.updateSetting('sectionHeights', JSON.stringify(updated)).catch(console.error);
+      }
+      return updated;
+    });
+  };
+
+  const handleDividerPointerDown = (dividerKey, e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsResizing(true);
+    setActiveDivider(dividerKey);
+    startYRef.current = e.clientY;
+    startHeightsRef.current = { ...sectionHeights };
+    e.target.setPointerCapture(e.pointerId);
+  };
+
+  const handleDividerPointerMove = (e) => {
+    if (!isResizing || !activeDivider) return;
+    const deltaY = e.clientY - startYRef.current;
+    const [prevMod, nextMod] = activeDivider.split('-');
+    const prevStartHeight = startHeightsRef.current[prevMod] || 150;
+    const nextStartHeight = startHeightsRef.current[nextMod] || 150;
+
+    const minHeights = {
+      pomodoro: 90,
+      tasks: 120,
+      reminders: 170,
+      notes: 100,
+      media: 30
+    };
+
+    const maxHeights = {
+      pomodoro: 100,
+      tasks: 99999,
+      reminders: 99999,
+      notes: 99999,
+      media: 30
+    };
+
+    const prevMin = minHeights[prevMod] || 80;
+    const nextMin = minHeights[nextMod] || 80;
+    const prevMax = maxHeights[prevMod] || 99999;
+    const nextMax = maxHeights[nextMod] || 99999;
+
+    let newPrevHeight = prevStartHeight + deltaY;
+    let newNextHeight = nextStartHeight - deltaY;
+
+    if (newPrevHeight < prevMin) {
+      const diff = prevMin - newPrevHeight;
+      newPrevHeight = prevMin;
+      newNextHeight -= diff;
+    }
+    if (newPrevHeight > prevMax) {
+      const diff = newPrevHeight - prevMax;
+      newPrevHeight = prevMax;
+      newNextHeight += diff;
+    }
+    if (newNextHeight < nextMin) {
+      const diff = nextMin - newNextHeight;
+      newNextHeight = nextMin;
+      newPrevHeight -= diff;
+    }
+    if (newNextHeight > nextMax) {
+      const diff = newNextHeight - nextMax;
+      newNextHeight = nextMax;
+      newPrevHeight += diff;
+    }
+
+    // Limites de segurança finais
+    if (newPrevHeight < prevMin) newPrevHeight = prevMin;
+    if (newPrevHeight > prevMax) newPrevHeight = prevMax;
+    if (newNextHeight < nextMin) newNextHeight = nextMin;
+    if (newNextHeight > nextMax) newNextHeight = nextMax;
+
+    const updatedHeights = {
+      ...sectionHeights,
+      [prevMod]: newPrevHeight,
+      [nextMod]: newNextHeight
+    };
+    setSectionHeights(updatedHeights);
+  };
+
+  const handleDividerPointerUp = async (e) => {
+    if (!isResizing) return;
+    setIsResizing(false);
+    setActiveDivider(null);
+    try {
+      e.target.releasePointerCapture(e.pointerId);
+    } catch(err) {}
+
+    if (window.api) {
+      await window.api.updateSetting('sectionHeights', JSON.stringify(sectionHeights));
+    }
+  };
+
+  // ================= PRESETS DE POMODORO =================
+  const handleCreatePomodoroPreset = async () => {
+    const name = newPresetName.trim();
+    const duration = parseInt(newPresetDuration);
+    const breakDuration = parseInt(newPresetBreakDuration) || 5;
+    if (!name || isNaN(duration) || duration <= 0) {
+      showAlert("Por favor, insira um nome válido e duração em minutos maior que zero.");
+      return;
+    }
+    const newPreset = { id: Date.now().toString(), name, duration, breakDuration };
+    const updated = [...pomodoroPresets, newPreset];
+    setPomodoroPresets(updated);
+    setNewPresetName('');
+    setNewPresetDuration('');
+    setNewPresetBreakDuration('');
+    if (window.api) {
+      await window.api.updateSetting('pomodoroPresets', JSON.stringify(updated));
+    }
+  };
+
+  const handleDeletePomodoroPreset = async (presetId) => {
+    const updated = pomodoroPresets.filter(p => p.id !== presetId);
+    setPomodoroPresets(updated);
+    if (window.api) {
+      await window.api.updateSetting('pomodoroPresets', JSON.stringify(updated));
+    }
+  };
+
+  const handleUpdatePomodoroPreset = async (presetId) => {
+    const name = editingPresetName.trim();
+    const duration = parseInt(editingPresetFocus);
+    const breakDuration = parseInt(editingPresetBreak) || 5;
+    if (!name || isNaN(duration) || duration <= 0) return;
+    const updated = pomodoroPresets.map(p => 
+      p.id === presetId ? { ...p, name, duration, breakDuration } : p
+    );
+    setPomodoroPresets(updated);
+    setEditingPresetId(null);
+    if (window.api) {
+      await window.api.updateSetting('pomodoroPresets', JSON.stringify(updated));
+    }
+  };
+
+  const handleApplyPomodoroPreset = async (preset) => {
+    setSettings(prev => ({ ...prev, pomodoroFocus: preset.duration.toString(), pomodoroBreak: (preset.breakDuration || 5).toString() }));
+    if (window.api) {
+      await window.api.updateSetting('pomodoroFocus', preset.duration.toString());
+      await window.api.updateSetting('pomodoroBreak', (preset.breakDuration || 5).toString());
+    }
+    setShowPomodoroPresetsModal(false);
+  };
+
+  const handlePresetsDragEnd = async (result) => {
+    if (!result.destination) return;
+    
+    // Lista filtrada que é exibida na tela
+    const filteredList = pomodoroPresets.filter(p => !hideDefaultPresets || !p.id.toString().startsWith('default'));
+    const sourcePreset = filteredList[result.source.index];
+    const destPreset = filteredList[result.destination.index];
+    if (!sourcePreset || !destPreset) return;
+    
+    // Encontra os índices reais no array completo de presets
+    const sourceIndex = pomodoroPresets.findIndex(p => p.id === sourcePreset.id);
+    const destIndex = pomodoroPresets.findIndex(p => p.id === destPreset.id);
+    if (sourceIndex === -1 || destIndex === -1) return;
+    
+    const items = Array.from(pomodoroPresets);
+    const [reorderedItem] = items.splice(sourceIndex, 1);
+    items.splice(destIndex, 0, reorderedItem);
+    
+    setPomodoroPresets(items);
+    if (window.api) {
+      await window.api.updateSetting('pomodoroPresets', JSON.stringify(items));
+    }
+  };
+
   const handleDragEnd = async (result) => {
     if (!result.destination) return;
     
@@ -974,6 +1320,1122 @@ function Widget() {
 
     await window.api?.reorderTasks(reordered.map(t => t.id));
     loadData();
+  };
+
+  const renderPomodoroModule = (currentHeight, hasNext, nextMod, modKey) => {
+    return (
+      <div key="pomodoro-mod" className="half-section" style={{ flexGrow: currentHeight, flexShrink: 1, flexBasis: '0%', minHeight: '80px', display: 'flex', flexDirection: 'column' }}>
+        <div className="fixed-half-header" style={{ flexShrink: 0 }}>
+          <div style={{ fontSize: '0.72rem', fontWeight: 600, letterSpacing: '1px', color: '#ff6b6b', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+              <path d="M12 2c-.5 2.5-2.5 3.5-4 4M12 2c.5 2.5 2.5 3.5 4 4M12 2v5" />
+              <path d="M12 7c-4.5 0-8 3-8 7.5S7.5 22 12 22s8-3 8-7.5S16.5 7 12 7z" />
+            </svg>
+            <span>POMODORO</span>
+          </div>
+          <button 
+            className="icon-btn" 
+            style={{ padding: '2px', color: 'var(--text-muted)' }} 
+            onClick={() => setShowPomodoroPresetsModal(true)}
+            title="Presets de Pomodoro"
+          >
+            <Clock size={14} />
+          </button>
+        </div>
+
+        <div className="scrollable-content" style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+          {pomodoroStatus === 'idle' ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1, justifyContent: 'center' }}>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', justifyContent: 'center' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                  <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 600 }}>FOCO</span>
+                  <input 
+                    type="number" 
+                    min="1" max="180"
+                    value={settings.pomodoroFocus || '25'}
+                    onChange={async (e) => {
+                      const val = e.target.value;
+                      setSettings(prev => ({ ...prev, pomodoroFocus: val }));
+                      if (window.api) await window.api.updateSetting('pomodoroFocus', val);
+                    }}
+                    style={{ 
+                      width: '55px', textAlign: 'center', padding: '4px', fontSize: '1.0rem', fontWeight: 'bold',
+                      backgroundColor: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: '6px',
+                      color: 'var(--text-main)', outline: 'none'
+                    }}
+                  />
+                  <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)' }}>minutos</span>
+                </div>
+                <span style={{ fontSize: '1.0rem', color: 'var(--text-muted)', fontWeight: 'bold', marginTop: '6px' }}>:</span>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                  <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 600 }}>DESCANSO</span>
+                  <input 
+                    type="number" 
+                    min="1" max="60"
+                    value={settings.pomodoroBreak || '5'}
+                    onChange={async (e) => {
+                      const val = e.target.value;
+                      setSettings(prev => ({ ...prev, pomodoroBreak: val }));
+                      if (window.api) await window.api.updateSetting('pomodoroBreak', val);
+                    }}
+                    style={{ 
+                      width: '55px', textAlign: 'center', padding: '4px', fontSize: '1.0rem', fontWeight: 'bold',
+                      backgroundColor: 'var(--bg-hover)', border: '1px solid var(--border)', borderRadius: '6px',
+                      color: 'var(--text-main)', outline: 'none'
+                    }}
+                  />
+                  <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)' }}>minutos</span>
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
+                <button className="btn-primary" style={{ padding: '4px 12px', fontSize: '0.75rem' }} onClick={handlePomodoroToggle}>
+                  Iniciar Foco
+                </button>
+                <button 
+                  className="btn-secondary" 
+                  style={{ padding: '4px 10px', fontSize: '0.72rem' }}
+                  onClick={() => {
+                    setNewPresetName('');
+                    setNewPresetDuration(settings.pomodoroFocus || '25');
+                    setNewPresetBreakDuration(settings.pomodoroBreak || '5');
+                    setShowPomodoroPresetsModal(true);
+                  }}
+                  title="Salvar tempos atuais como preset"
+                >
+                  💾 Salvar Preset
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', flex: 1, justifyContent: 'center' }}>
+              <div style={{ fontSize: '1.8rem', fontWeight: 'bold', fontFamily: 'monospace', color: pomodoroStatus === 'break' ? 'var(--success)' : 'var(--primary)' }}>
+                {formatPomodoroTime(pomodoroTimeLeft)}
+              </div>
+              <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+                {pomodoroStatus === 'break' ? '☕ DESCANSO' : pomodoroStatus === 'paused' ? '⏸️ PAUSADO' : '🔥 FOCANDO'}
+              </span>
+              <div style={{ display: 'flex', gap: '6px', marginTop: '3px' }}>
+                <button className="btn-primary" style={{ padding: '4px 10px', fontSize: '0.75rem' }} onClick={handlePomodoroToggle}>
+                  {pomodoroStatus === 'running' ? 'Pausar' : pomodoroStatus === 'paused' ? 'Continuar' : 'Fim da Pausa'}
+                </button>
+                {(pomodoroStatus === 'running' || pomodoroStatus === 'paused') && (
+                  <button className="btn-secondary" style={{ padding: '4px 10px', fontSize: '0.75rem' }} onClick={handlePomodoroBreak}>
+                    Descanso
+                  </button>
+                )}
+                <button className="btn-secondary" style={{ padding: '4px 10px', fontSize: '0.75rem', color: 'var(--danger)' }} onClick={resetPomodoro}>
+                  Parar
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+        {hasNext && (
+          <div 
+            className={(modKey === 'media' || nextMod === 'media') ? "resize-divider static-divider" : "resize-divider"} 
+            onPointerDown={(modKey === 'media' || nextMod === 'media') ? undefined : (e) => handleDividerPointerDown(`${modKey}-${nextMod}`, e)} 
+            onDoubleClick={(modKey === 'media' || nextMod === 'media') ? undefined : () => handleDividerDoubleClick(`${modKey}-${nextMod}`)} 
+          />
+        )}
+      </div>
+    );
+  };
+
+  const renderMediaModule = (currentHeight, hasNext, nextMod, modKey) => {
+    const getAppIcon = (app, appIconBase64) => {
+      if (appIconBase64) {
+        return (
+          <img 
+            src={appIconBase64} 
+            alt={app} 
+            style={{ 
+              width: '12px', 
+              height: '12px', 
+              flexShrink: 0, 
+              objectFit: 'contain',
+              borderRadius: '2px'
+            }} 
+          />
+        );
+      }
+      const appLower = (app || '').toLowerCase();
+      if (appLower.includes('spotify')) {
+        return (
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="#1DB954" style={{ flexShrink: 0 }} title="Spotify">
+            <path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm4.586 14.424c-.18.295-.565.387-.86.207-2.377-1.454-5.37-1.783-8.893-.982-.336.076-.67-.135-.746-.47-.077-.337.135-.67.472-.747 3.852-.88 7.15-.51 9.85 1.144.293.18.385.563.207.858zm1.225-2.72c-.227.367-.707.487-1.074.26-2.72-1.672-6.87-2.157-10.075-1.182-.413.125-.845-.107-.97-.52-.125-.413.107-.847.52-.97 3.666-1.11 8.24-.57 11.34 1.34.367.226.487.707.26 1.072zm.105-2.836C14.492 8.78 8.7 8.59 5.334 9.61c-.516.156-1.054-.14-1.21-.655-.156-.517.14-1.05.655-1.21 3.86-1.17 10.25-.95 14.22 1.41.464.275.615.874.34 1.34-.275.463-.873.614-1.34.34z"/>
+          </svg>
+        );
+      }
+      if (appLower.includes('chrome')) {
+        return (
+          <svg width="12" height="12" viewBox="0 0 24 24" style={{ flexShrink: 0 }} title="Google Chrome">
+            <circle cx="12" cy="12" r="10.5" fill="#ffffff" />
+            <path d="M12 2c4.2 0 7.8 2.6 9.2 6.3l-4.6 8A5 5 0 0 1 12 14.5H3.6C3.9 8.9 7.6 2 12 2z" fill="#EA4335" />
+            <path d="M21.2 8.3A10 10 0 0 1 12 22a9.9 9.9 0 0 1-4.8-1.2l4.8-8.3c.7.4 1.5.5 2.3.2l7 3.6z" fill="#FBBC05" />
+            <path d="M7.2 20.8A10 10 0 0 1 2 12c0-1.3.3-2.5.8-3.6l4.8 8.3c.5.8 1.3 1.4 2.3 1.6L7.2 20.8z" fill="#34A853" />
+            <circle cx="12" cy="12" r="4" fill="#4285F4" />
+            <circle cx="12" cy="12" r="5" fill="none" stroke="#ffffff" strokeWidth="1" />
+          </svg>
+        );
+      }
+      if (appLower.includes('edge')) {
+        return (
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }} title="Microsoft Edge">
+            <defs>
+              <linearGradient id="edge-grad" x1="0" y1="1" x2="1" y2="0">
+                <stop offset="0%" stopColor="#0c59df" />
+                <stop offset="30%" stopColor="#0b95ff" />
+                <stop offset="62%" stopColor="#00f2fe" />
+                <stop offset="85%" stopColor="#4ff5b2" />
+                <stop offset="100%" stopColor="#a4ff63" />
+              </linearGradient>
+            </defs>
+            <path d="M12 2C6.48 2 2 6.48 2 12c0 4.7 3.2 8.6 7.5 9.7l.5-4.2c-1.4 0-2.5-1.1-2.5-2.5c0-1.8 1.5-3.3 3.3-3.3h5.9c2.1 0 3.8-1.7 3.8-3.8c0-3.1-2.9-5.4-5.9-4.7c-1.2.3-2.2 1.1-2.7 2.2L12 2z" fill="url(#edge-grad)" />
+          </svg>
+        );
+      }
+      if (appLower.includes('brave')) {
+        return (
+          <svg width="12" height="12" viewBox="0 0 24 24" style={{ flexShrink: 0 }} title="Brave Browser">
+            <defs>
+              <linearGradient id="brave-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#ff5a36" />
+                <stop offset="100%" stopColor="#d82b0d" />
+              </linearGradient>
+            </defs>
+            <path d="M12 2L4 9.5l1.5 8.5L12 22l6.5-4L20 9.5L12 2zm-4.5 7.5L12 5.8l4.5 3.7l-1 4.5H8.5l-1-4.5z" fill="url(#brave-grad)" />
+            <path d="M12 5.8L8.5 13.5h7L12 5.8z" fill="#ffffff" opacity="0.15" />
+          </svg>
+        );
+      }
+      if (appLower.includes('opera')) {
+        return (
+          <svg width="12" height="12" viewBox="0 0 24 24" style={{ flexShrink: 0 }} title="Opera">
+            <defs>
+              <linearGradient id="opera-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" stopColor="#ff4d4d" />
+                <stop offset="100%" stopColor="#cc0000" />
+              </linearGradient>
+            </defs>
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 17c-2.2 0-4-3.13-4-7s1.8-7 4-7 4 3.13 4 7-1.8 7-4 7z" fill="url(#opera-grad)" />
+          </svg>
+        );
+      }
+      if (appLower.includes('firefox')) {
+        return (
+          <svg width="12" height="12" viewBox="0 0 24 24" style={{ flexShrink: 0 }} title="Firefox">
+            <defs>
+              <linearGradient id="firefox-globe" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#1e3c72" />
+                <stop offset="100%" stopColor="#2a5298" />
+              </linearGradient>
+              <linearGradient id="firefox-fire" x1="0%" y1="100%" x2="100%" y2="0%">
+                <stop offset="0%" stopColor="#ff3300" />
+                <stop offset="60%" stopColor="#ff8c00" />
+                <stop offset="100%" stopColor="#ffdb00" />
+              </linearGradient>
+            </defs>
+            <circle cx="12" cy="12" r="10" fill="url(#firefox-globe)" />
+            <path d="M20 9.5c-.3-1.5-.9-2.8-1.8-3.8c-1.7-1.7-4.7-2.9-7.7-1.9c-1.5.5-2.8 1.5-3.6 2.8c-.8.2-1.6.6-2.2 1.2c-1.5 1.5-2.2 3.6-1.8 5.7c.4 2.1 1.7 3.9 3.6 4.8c1.9 1 4.2 1.1 6.1.3c2.5-1.1 4.2-3.6 4.4-6.4c0-1.1-.3-2.1-.8-3c.8.8 1.3 1.8 1.4 2.9c0 1-.3 2-.9 2.8c-.6.8-1.5 1.3-2.5 1.4c.5-1 .6-2.2.3-3.3c-.3-1.1-.9-2.1-1.8-2.8c.8 1 .9 2.4.4 3.5c-.5 1.1-1.7 1.8-2.9 1.7c-1.2 0-2.3-.7-2.8-1.8c-.5-1.1-.4-2.4.3-3.4c.7-1 1.9-1.5 3.1-1.3c-.6-.7-1.5-1.1-2.4-1.1c-1.8 0-3.3 1.5-3.3 3.3c0 .8.3 1.6.8 2.2c-.4-.5-.6-1.2-.6-1.9c0-1.3.8-2.4 2-2.8c1.2-.4 2.5-.1 3.4.8c.3-.6.4-1.3.2-2c-.2-.7-.7-1.3-1.3-1.6c.9.2 1.7.7 2.2 1.5c.5.8.7 1.8.5 2.7c1-.7 1.5-1.9 1.4-3.1z" fill="url(#firefox-fire)" />
+          </svg>
+        );
+      }
+      if (appLower.includes('comet')) {
+        return (
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }} title="Comet Browser">
+            <defs>
+              <linearGradient id="comet-grad" x1="0%" y1="100%" x2="100%" y2="0%">
+                <stop offset="0%" stopColor="#ff4500" />
+                <stop offset="60%" stopColor="#ffaa00" />
+                <stop offset="100%" stopColor="#ffffff" />
+              </linearGradient>
+            </defs>
+            <path d="M4 20L14 10" stroke="url(#comet-grad)" strokeWidth="3" strokeLinecap="round" />
+            <path d="M2 18L10 10" stroke="url(#comet-grad)" strokeWidth="1.5" strokeLinecap="round" opacity="0.5" />
+            <path d="M6 22L14 14" stroke="url(#comet-grad)" strokeWidth="1.5" strokeLinecap="round" opacity="0.5" />
+            <circle cx="16" cy="8" r="5" fill="url(#comet-grad)" />
+            <circle cx="16" cy="8" r="2" fill="#ffffff" />
+          </svg>
+        );
+      }
+      if (appLower.includes('youtube')) {
+        return (
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="#FF0000" style={{ flexShrink: 0 }} title="YouTube">
+            <path d="M23.498 6.163a3.003 3.003 0 0 0-2.11-2.11C19.517 3.545 12 3.545 12 3.545s-7.517 0-9.388.508a3.003 3.003 0 0 0-2.11 2.11C0 8.033 0 12 0 12s0 3.967.502 5.837a3.003 3.003 0 0 0 2.11 2.11c1.871.508 9.388.508 9.388.508s7.517 0 9.388-.508a3.003 3.003 0 0 0 2.11-2.11C24 15.967 24 12 24 12s0-3.967-.502-5.837zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+          </svg>
+        );
+      }
+      if (appLower.includes('vlc')) {
+        return (
+          <svg width="12" height="12" viewBox="0 0 24 24" style={{ flexShrink: 0 }} title="VLC Media Player">
+            <path d="M12 2L4 18h16L12 2z" fill="#FF5500" />
+            <path d="M8 10h8l-2-4h-4l-2 4z" fill="#FFFFFF" />
+            <path d="M6 14h12l-1-2H7l-1 2z" fill="#FFFFFF" />
+            <path d="M3 20h18v2H3v-2z" fill="#FF5500" />
+          </svg>
+        );
+      }
+      return <Music size={11} style={{ color: 'var(--primary)', flexShrink: 0, animation: mediaPlaying ? 'pulse 2s infinite' : 'none' }} />;
+    };
+
+    return (
+      <div key="media-mod" style={{ height: '30px', minHeight: '30px', maxHeight: '30px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 12px', borderBottom: '1px solid var(--border)', flexShrink: 0, backgroundColor: 'rgba(255,255,255,0.01)', position: 'relative' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden', flex: 1, marginRight: '8px' }}>
+          {getAppIcon(mediaApp, mediaAppIcon)}
+          <div 
+            className="media-marquee-container"
+            style={{ cursor: mediaTitle ? 'pointer' : 'default' }}
+            onClick={() => mediaTitle && window.api?.openActiveMediaApp(mediaApp)}
+            title={mediaTitle ? `Focar ${mediaApp || 'reprodutor'}` : undefined}
+          >
+            <span 
+              className={mediaTitle ? "media-marquee-text" : ""}
+              style={{ 
+                fontSize: '0.72rem', 
+                color: mediaTitle ? 'var(--text-main)' : 'var(--text-muted)', 
+                fontWeight: 600, 
+                whiteSpace: 'nowrap'
+              }}
+            >
+              {mediaTitle ? `${mediaTitle}${mediaArtist ? ' - ' + mediaArtist : ''}` : 'Sem mídia ativa'}
+            </span>
+          </div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+          <button 
+            className="media-btn"
+            onClick={() => window.api?.triggerMediaCommand('prev')}
+            title="Anterior"
+          >
+            <SkipBack size={11} fill="currentColor" />
+          </button>
+          <button 
+            className="media-btn play-pause"
+            onClick={() => window.api?.triggerMediaCommand(mediaPlaying ? 'pause' : 'play')}
+            title={mediaPlaying ? 'Pausar' : 'Reproduzir'}
+          >
+            {mediaPlaying ? <Pause size={9} fill="currentColor" /> : <Play size={9} fill="currentColor" style={{ marginLeft: '0.5px' }} />}
+          </button>
+          <button 
+            className="media-btn"
+            onClick={() => window.api?.triggerMediaCommand('next')}
+            title="Próxima"
+          >
+            <SkipForward size={11} fill="currentColor" />
+          </button>
+          <div 
+            style={{ display: 'flex', alignItems: 'center', position: 'relative' }}
+            onMouseEnter={() => {
+              if (volumeHoverTimeout.current) clearTimeout(volumeHoverTimeout.current);
+              setShowVolumeSlider(true);
+            }}
+            onMouseLeave={() => {
+              volumeHoverTimeout.current = setTimeout(() => {
+                setShowVolumeSlider(false);
+              }, 180);
+            }}
+          >
+            <button 
+              className="media-btn"
+              onClick={() => {
+                window.api?.triggerMediaCommand('mute');
+                setMediaMuted(!mediaMuted);
+              }}
+              onWheel={(e) => {
+                e.preventDefault();
+                const step = 2;
+                setVolume(prev => {
+                  let newVal = prev + (e.deltaY < 0 ? step : -step);
+                  if (newVal > 100) newVal = 100;
+                  if (newVal < 0) newVal = 0;
+                  window.api?.setMediaVolume(newVal);
+                  return newVal;
+                });
+              }}
+              title={(mediaMuted || volume === 0) ? 'Desmutar' : 'Mutar (Role a bolinha do mouse para ajustar)'}
+            >
+              {(mediaMuted || volume === 0) ? <VolumeX size={11} style={{ color: 'var(--danger)' }} /> : <Volume2 size={11} />}
+            </button>
+            <div 
+              onWheel={(e) => {
+                e.preventDefault();
+                const step = 2;
+                setVolume(prev => {
+                  let newVal = prev + (e.deltaY < 0 ? step : -step);
+                  if (newVal > 100) newVal = 100;
+                  if (newVal < 0) newVal = 0;
+                  window.api?.setMediaVolume(newVal);
+                  return newVal;
+                });
+              }}
+              style={{ 
+                position: 'absolute',
+                bottom: '26px', 
+                left: '50%',
+                transform: showVolumeSlider ? 'translateX(-50%) translateY(0)' : 'translateX(-50%) translateY(6px)',
+                opacity: showVolumeSlider ? 1 : 0,
+                pointerEvents: showVolumeSlider ? 'auto' : 'none',
+                backgroundColor: 'var(--bg-main, #1e1e2e)',
+                border: '1px solid var(--border, rgba(255,255,255,0.15))',
+                borderRadius: '6px',
+                padding: '6px 5px 8px 5px',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '4px',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+                zIndex: 99999,
+                transition: 'opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1), transform 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                width: '32px'
+              }}
+            >
+              <span style={{ fontSize: '0.62rem', fontWeight: 'bold', color: 'var(--text-main)', userSelect: 'none' }}>
+                {volume}%
+              </span>
+              <input 
+                type="range" 
+                min="0" 
+                max="100" 
+                value={volume} 
+                onChange={(e) => {
+                  const val = parseInt(e.target.value);
+                  setVolume(val);
+                  window.api?.setMediaVolume(val);
+                  if (val > 0 && mediaMuted) {
+                    setMediaMuted(false);
+                  }
+                }}
+                style={{ 
+                  height: '50px', 
+                  width: '4px',
+                  accentColor: 'var(--primary)',
+                  cursor: 'pointer',
+                  background: 'rgba(255,255,255,0.2)',
+                  WebkitAppearance: 'slider-vertical',
+                  margin: '2px 0'
+                }} 
+              />
+            </div>
+          </div>
+        </div>
+        {hasNext && (
+          <div 
+            className="resize-divider static-divider"
+          />
+        )}
+      </div>
+    );
+  };
+
+  const renderNotesModule = (currentHeight, hasNext, nextMod, modKey) => {
+    return (
+      <div key="notes-mod" className="half-section" style={{ flexGrow: currentHeight, flexShrink: 1, flexBasis: '0%', minHeight: '90px', display: 'flex', flexDirection: 'column' }}>
+        <div className="fixed-half-header" style={{ flexShrink: 0 }}>
+          <span style={{ fontSize: '0.72rem', fontWeight: 600, letterSpacing: '1px', color: '#a78bfa', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+              <path d="M12 20h9" />
+              <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+            </svg>
+            <span>NOTAS RÁPIDAS</span>
+          </span>
+        </div>
+        <div className="scrollable-content" style={{ flex: 1, paddingBottom: '10px', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+          <textarea 
+            className="form-control"
+            style={{ flex: 1, height: '100%', resize: 'none', backgroundColor: 'var(--bg-main)', overflow: 'auto' }}
+            placeholder="Escreva algo aqui... salvo automaticamente."
+            value={quickNote}
+            onChange={(e) => setQuickNote(e.target.value)}
+            onBlur={() => {
+              if (window.api) window.api.updateSetting('quickNote', quickNote);
+            }}
+          />
+        </div>
+        {hasNext && (
+          <div 
+            className={(modKey === 'media' || nextMod === 'media') ? "resize-divider static-divider" : "resize-divider"} 
+            onPointerDown={(modKey === 'media' || nextMod === 'media') ? undefined : (e) => handleDividerPointerDown(`${modKey}-${nextMod}`, e)} 
+            onDoubleClick={(modKey === 'media' || nextMod === 'media') ? undefined : () => handleDividerDoubleClick(`${modKey}-${nextMod}`)} 
+          />
+        )}
+      </div>
+    );
+  };
+
+  const renderRemindersModule = (currentHeight, hasNext, nextMod, modKey) => {
+    return (
+      <div key="reminders-mod" className="half-section" style={{ flexGrow: currentHeight, flexShrink: 1, flexBasis: '0%', minHeight: '120px', display: 'flex', flexDirection: 'column' }}>
+        <div className="fixed-half-header" style={{ flexShrink: 0 }}>
+          <span style={{ fontSize: '0.72rem', fontWeight: 600, letterSpacing: '1px', color: '#ffb84d', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <Bell size={12} style={{ flexShrink: 0 }} />
+            <span>LEMBRETES</span>
+          </span>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <a className="section-title-action" onClick={openHistory}>Ver Todos</a>
+          </div>
+        </div>
+
+        <div className="scrollable-content" style={{ flex: 1, overflowY: 'auto' }}>
+          <div className="form-group">
+            <label className="form-label">MOTIVO</label>
+            <input 
+              type="text" 
+              className="form-control" 
+              placeholder="ex: Ligar para Cliente" 
+              value={newReminderTitle}
+              onChange={e => { setNewReminderTitle(e.target.value); setReminderError(''); }}
+            />
+          </div>
+          <div className="row form-group">
+            <div style={{flex: 1}}>
+              <label className="form-label">DATA</label>
+              <input 
+                type="date" 
+                className="form-control"
+                value={newReminderDate}
+                onChange={e => { setNewReminderDate(e.target.value); setReminderError(''); }} 
+              />
+            </div>
+            <div style={{flex: 1}}>
+              <label className="form-label">HORA</label>
+              <div style={{ display: 'flex', gap: '5px' }}>
+                <input 
+                  type="time" 
+                  className="form-control" 
+                  value={newReminderTime} 
+                  onChange={e => { setNewReminderTime(e.target.value); setReminderError(''); }} 
+                  style={{ flex: 1 }}
+                />
+              </div>
+            </div>
+          </div>
+          
+          <div className="form-group">
+            <label className="form-label">RECORRÊNCIA</label>
+            <select 
+              className="form-control"
+              value={newReminderRecurrence}
+              onChange={e => { setNewReminderRecurrence(e.target.value); setReminderError(''); }}
+            >
+              <option value="none">Não repetir (Único)</option>
+              <option value="daily">Diariamente</option>
+              <option value="weekly">Semanalmente</option>
+              <option value="monthly">Mensalmente</option>
+              <option value="yearly">Anualmente</option>
+            </select>
+          </div>
+          
+          {reminders.some(r => (r.status === 'agendado' || r.status === 'pausado') && r.datetime.startsWith(newReminderDate) && r.datetime.includes('T' + newReminderTime)) && (
+            <div style={{ color: 'var(--danger)', fontSize: '0.7rem', marginBottom: '10px', marginTop: '-5px' }}>
+              ⚠️ Já existe um lembrete nesse horário.
+            </div>
+          )}
+
+          {reminderError && (
+            <div style={{ color: 'var(--danger)', fontSize: '0.7rem', marginBottom: '10px', marginTop: '-5px' }}>
+              ⚠️ {reminderError}
+            </div>
+          )}
+          
+          <button className="btn-primary" onClick={handleAddReminder} style={{ marginBottom: '10px' }}>
+            <Bell size={16} /> Agendar Lembrete
+          </button>
+
+          <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '1px', marginBottom: '6px', marginTop: '4px' }}>
+            PRÓXIMOS
+          </div>
+          {nextReminders.map(r => (
+            <div key={r.id} className="list-item" style={{ padding: '6px 10px', marginBottom: '6px', gap: '8px' }}>
+              <div className="list-item-content">
+                <h4 style={{fontSize: '0.75rem', color: '#fff', marginBottom: '2px'}}>{r.title}</h4>
+                <p style={{fontSize: '0.65rem'}}>{new Date(r.datetime).toLocaleString()}</p>
+              </div>
+              <Bell size={12} color="var(--text-muted)" style={{marginLeft: 'auto'}}/>
+            </div>
+          ))}
+        </div>
+        {hasNext && (
+          <div 
+            className={(modKey === 'media' || nextMod === 'media') ? "resize-divider static-divider" : "resize-divider"} 
+            onPointerDown={(modKey === 'media' || nextMod === 'media') ? undefined : (e) => handleDividerPointerDown(`${modKey}-${nextMod}`, e)} 
+            onDoubleClick={(modKey === 'media' || nextMod === 'media') ? undefined : () => handleDividerDoubleClick(`${modKey}-${nextMod}`)} 
+          />
+        )}
+      </div>
+    );
+  };
+
+  const renderTasksModule = (currentHeight, hasNext, nextMod, modKey) => {
+    return (
+      <div key="tasks-mod" className="half-section" style={{ flexGrow: currentHeight, flexShrink: 1, flexBasis: '0%', minHeight: '120px', display: 'flex', flexDirection: 'column' }}>
+        <div className="fixed-half-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+          <span style={{ fontSize: '0.72rem', fontWeight: 600, letterSpacing: '1px', color: '#4ade80', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <CheckCircle size={12} style={{ flexShrink: 0 }} />
+            <span>TAREFAS</span>
+          </span>
+          <select 
+             style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', fontSize: '0.7rem', outline: 'none', cursor: 'pointer' }}
+             value={taskSortOrder}
+             onChange={(e) => {
+               const v = e.target.value;
+               setTaskSortOrder(v);
+               if (window.api) window.api.updateSetting('taskSortOrder', v);
+             }}
+          >
+             <option value="custom" style={{ color: '#000' }}>Personalizada (Drag)</option>
+             <option value="tag" style={{ color: '#000' }}>Organizar por Etiquetas</option>
+             <option value="newest_bottom" style={{ color: '#000' }}>Novas embaixo</option>
+             <option value="newest_top" style={{ color: '#000' }}>Novas em cima</option>
+             <option value="az" style={{ color: '#000' }}>Ordem Alfabética (A-Z)</option>
+             <option value="za" style={{ color: '#000' }}>Ordem Alfabética (Z-A)</option>
+          </select>
+        </div>
+
+        <div style={{ padding: '6px 12px 4px 12px', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', position: 'relative' }}>
+            <div style={{ flex: 1, position: 'relative' }}>
+              <input 
+                type="text" 
+                className="add-task-input" 
+                placeholder="+ Adicionar tarefa rápida..."
+                value={newTaskTitle}
+                onChange={(e) => setNewTaskTitle(e.target.value)}
+                onKeyDown={handleAddTask}
+                style={{ paddingRight: settings.enableTags === 'true' ? '30px' : '10px' }}
+              />
+              {settings.enableTags === 'true' && (
+                <div 
+                  ref={tagMenuRef}
+                  style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', cursor: 'pointer', color: selectedTag ? getTagColorWithSaved(selectedTag) : 'var(--text-muted)' }}
+                  onClick={() => setShowTagMenu(!showTagMenu)}
+                >
+                  <Tag size={16} />
+                  {showTagMenu && (
+                    <div style={{ position: 'absolute', right: 0, top: '25px', backgroundColor: 'var(--bg-main)', border: '1px solid var(--border)', borderRadius: '8px', padding: '10px', zIndex: 100, width: '200px', boxShadow: '0 4px 12px rgba(0,0,0,0.5)', cursor: 'default' }} onClick={(e) => e.stopPropagation()}>
+                      <div style={{ fontSize: '0.75rem', fontWeight: 'bold', marginBottom: '8px', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        ESCOLHA UMA TAG
+                        <span style={{ cursor: 'pointer', padding: '2px 5px' }} onClick={() => setShowTagMenu(false)}>✕</span>
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginBottom: '10px' }}>
+                        <span 
+                          style={{ fontSize: '0.7rem', padding: '3px 8px', borderRadius: '12px', cursor: 'pointer', border: '1px solid var(--border)', backgroundColor: !selectedTag ? 'rgba(255,255,255,0.1)' : 'transparent' }}
+                          onClick={() => { setSelectedTag(''); setShowTagMenu(false); }}
+                        >Nenhuma</span>
+                        {[...savedTags].sort((a,b) => a.name.localeCompare(b.name)).map(tag => (
+                          editingTag === tag.name ? (
+                            <input
+                              key={`edit-${tag.name}`}
+                              autoFocus
+                              value={editingTagValue}
+                              onChange={e => setEditingTagValue(e.target.value)}
+                              onBlur={handleSaveTagEdit}
+                              onKeyDown={e => e.key === 'Enter' && handleSaveTagEdit()}
+                              style={{ fontSize: '0.7rem', padding: '2px 4px', width: '70px', borderRadius: '12px', border: '1px solid var(--border)', backgroundColor: 'var(--bg-hover)', color: '#fff' }}
+                            />
+                          ) : (
+                            <span 
+                              key={tag.name}
+                              style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.7rem', padding: '2px 6px', borderRadius: '12px', cursor: 'pointer', backgroundColor: tag.color, color: '#fff', opacity: selectedTag === tag.name ? 1 : 0.6 }}
+                              onContextMenu={(e) => { e.preventDefault(); setEditingTag(tag.name); setEditingTagValue(tag.name); }}
+                            >
+                              <span 
+                                onClick={() => { setSelectedTag(tag.name); setShowTagMenu(false); }}
+                              >
+                                {tag.name}
+                              </span>
+                              <span style={{ fontSize: '0.6rem', padding: '0 2px', opacity: 0.7 }} onClick={(e) => { e.stopPropagation(); handleDeleteTag(tag.name); }}>✕</span>
+                            </span>
+                          )
+                        ))}
+                      </div>
+                      <input 
+                        type="text" 
+                        className="form-control" 
+                        style={{ fontSize: '0.75rem', padding: '4px', backgroundColor: 'var(--bg-hover)', color: 'var(--text-main)', border: '1px solid var(--border)' }}
+                        placeholder="Nova tag..."
+                        value={newTagInputVal}
+                        onChange={(e) => setNewTagInputVal(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            const cleanVal = newTagInputVal.trim();
+                            if (cleanVal) {
+                              addTagToSaved(cleanVal);
+                              setSelectedTag(cleanVal);
+                            }
+                            setNewTagInputVal('');
+                            setShowTagMenu(false);
+                          }
+                        }}
+                      />
+                      <div 
+                        onClick={() => { setShowTagMenu(false); setShowTagManager(true); }}
+                        style={{ 
+                          marginTop: '8px', 
+                          paddingTop: '6px', 
+                          borderTop: '1px solid var(--border)', 
+                          textAlign: 'center', 
+                          fontSize: '0.7rem', 
+                          color: 'var(--primary)', 
+                          cursor: 'pointer',
+                          fontWeight: 'bold',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '4px'
+                        }}
+                      >
+                        <Settings size={10} /> Gerenciar Etiquetas
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+        
+        <div className="scrollable-content" style={{ flex: 1, overflowY: 'auto' }}>
+          <DragDropContext onDragEnd={handleDragEnd}>
+            <Droppable droppableId="pendingTasks">
+              {(provided) => (
+                <div className="task-list" {...provided.droppableProps} ref={provided.innerRef}>
+                  {pendingTasks.map((task, index) => (
+                    <Draggable key={task.id.toString()} draggableId={task.id.toString()} index={index}>
+                      {(provided) => (
+                        <div 
+                          className="task-item"
+                          ref={provided.innerRef}
+                          {...provided.draggableProps}
+                          style={{ 
+                            ...provided.draggableProps.style, 
+                            display: 'flex', 
+                            flexDirection: 'column', 
+                            alignItems: 'stretch', 
+                            gap: '4px', 
+                            marginBottom: '8px',
+                            marginTop: index === 0 ? '6px' : '0px'
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '100%' }}>
+                            <div {...provided.dragHandleProps} style={{ cursor: 'grab', color: 'var(--text-muted)' }}>
+                              <GripVertical size={14} />
+                            </div>
+                            <input 
+                              type="checkbox" 
+                              className="task-checkbox" 
+                              checked={false}
+                              onChange={() => handleToggleTask(task.id, false)}
+                            />
+                            {editingTaskId === task.id ? (
+                              <input
+                                autoFocus
+                                type="text"
+                                className="add-task-input"
+                                style={{ flex: 1, padding: '4px 8px', fontSize: '0.85rem' }}
+                                value={editingTaskTitle}
+                                onChange={(e) => setEditingTaskTitle(e.target.value)}
+                                onBlur={() => handleUpdateTaskTitle(task.id)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') handleUpdateTaskTitle(task.id);
+                                  if (e.key === 'Escape') {
+                                    setEditingTaskId(null);
+                                    setEditingTaskTitle('');
+                                  }
+                                }}
+                              />
+                            ) : (
+                              <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
+                                <span 
+                                  className="task-title" 
+                                  style={{ cursor: 'text', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                                  onClick={() => {
+                                    setEditingTaskId(task.id);
+                                    setEditingTaskTitle(task.title);
+                                  }}
+                                >
+                                  {task.title}
+                                </span>
+                                {settings.enableTags === 'true' && task.tag && (
+                                  <span style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', backgroundColor: task.tagColor, color: '#fff', fontWeight: 600, flexShrink: 0 }}>
+                                    {task.tag}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                            {settings.enableTags === 'true' && (
+                              <span 
+                                className={`task-tag-trigger ${editingTaskTagId === task.id ? 'active' : ''}`}
+                                style={{ cursor: 'pointer', color: task.tag ? task.tagColor : 'var(--text-muted)', marginLeft: '4px', display: 'flex', alignItems: 'center', position: 'relative' }} 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const rect = e.currentTarget.getBoundingClientRect();
+                                  const container = e.currentTarget.closest('.scrollable-content');
+                                  let spaceBelow = window.innerHeight - rect.bottom;
+                                  if (container) {
+                                    const containerRect = container.getBoundingClientRect();
+                                    spaceBelow = containerRect.bottom - rect.bottom;
+                                  }
+                                  setTaskTagMenuDirection(spaceBelow < 155 ? 'up' : 'down');
+                                  setEditingTaskTagId(task.id);
+                                  setSelectedTaskTag(task.tag || '');
+                                  setShowTaskTagMenu(true);
+                                }}
+                                title={task.tag ? `Mudar etiqueta: ${task.tag}` : "Adicionar etiqueta"}
+                              >
+                                <Tag size={12} />
+                                {editingTaskTagId === task.id && showTaskTagMenu && (
+                                  <div 
+                                    ref={taskTagMenuRef}
+                                    style={{ 
+                                      position: 'absolute', 
+                                      right: '20px', 
+                                      ...(taskTagMenuDirection === 'up' ? { bottom: '15px' } : { top: '15px' }),
+                                      backgroundColor: 'var(--bg-main)', 
+                                      border: '1px solid var(--border)', 
+                                      borderRadius: '8px', 
+                                      padding: '10px', 
+                                      zIndex: 1000, 
+                                      width: '200px', 
+                                      boxShadow: '0 4px 12px rgba(0,0,0,0.5)', 
+                                      cursor: 'default',
+                                      textAlign: 'left'
+                                    }} 
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <div style={{ fontSize: '0.75rem', fontWeight: 'bold', marginBottom: '8px', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                      ETIQUETA DA TAREFA
+                                      <span style={{ cursor: 'pointer', padding: '2px 5px' }} onClick={() => { setShowTaskTagMenu(false); setEditingTaskTagId(null); }}>✕</span>
+                                    </div>
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginBottom: '10px' }}>
+                                      <span 
+                                        style={{ fontSize: '0.7rem', padding: '3px 8px', borderRadius: '12px', cursor: 'pointer', border: '1px solid var(--border)', backgroundColor: !selectedTaskTag ? 'rgba(255,255,255,0.1)' : 'transparent', color: 'var(--text-main)' }}
+                                        onClick={() => handleUpdateTaskTag(task.id, '')}
+                                      >Nenhuma</span>
+                                      {savedTags.map(tag => (
+                                        <span 
+                                          key={tag.name}
+                                          style={{ fontSize: '0.7rem', padding: '2px 6px', borderRadius: '12px', cursor: 'pointer', backgroundColor: tag.color, color: '#fff', opacity: selectedTaskTag === tag.name ? 1 : 0.6 }}
+                                          onClick={() => handleUpdateTaskTag(task.id, tag.name)}
+                                        >
+                                          {tag.name}
+                                        </span>
+                                      ))}
+                                    </div>
+                                    <input 
+                                      type="text" 
+                                      className="form-control" 
+                                      style={{ fontSize: '0.75rem', padding: '4px', height: '24px', backgroundColor: 'var(--bg-hover)', color: 'var(--text-main)', border: '1px solid var(--border)' }}
+                                      placeholder="Nova tag..."
+                                      value={newTaskTagInputVal}
+                                      onChange={(e) => setNewTaskTagInputVal(e.target.value)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                          const cleanVal = newTaskTagInputVal.trim();
+                                          if (cleanVal) {
+                                            handleUpdateTaskTag(task.id, cleanVal);
+                                          }
+                                          setNewTaskTagInputVal('');
+                                          setShowTaskTagMenu(false);
+                                        }
+                                      }}
+                                    />
+                                    <div 
+                                      onClick={() => { setShowTaskTagMenu(false); setEditingTaskTagId(null); setShowTagManager(true); }}
+                                      style={{ 
+                                        marginTop: '8px', 
+                                        paddingTop: '6px', 
+                                        borderTop: '1px solid var(--border)', 
+                                        textAlign: 'center', 
+                                        fontSize: '0.7rem', 
+                                        color: 'var(--primary)', 
+                                        cursor: 'pointer',
+                                        fontWeight: 'bold',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        gap: '4px'
+                                      }}
+                                    >
+                                      <Settings size={10} /> Gerenciar Etiquetas
+                                    </div>
+                                  </div>
+                                )}
+                              </span>
+                            )}
+                            
+                            <span 
+                              style={{ cursor: 'pointer', color: task.details ? 'var(--primary)' : 'var(--text-muted)', marginLeft: '4px', display: 'flex', alignItems: 'center' }} 
+                              onClick={(e) => { e.stopPropagation(); toggleTaskDetails(task.id); }}
+                              title="Detalhes da tarefa"
+                            >
+                              <AlignLeft size={14} />
+                            </span>
+
+                            <span style={{ cursor: 'pointer', color: 'var(--text-muted)', marginLeft: '4px' }} onClick={() => handleDeleteTask(task.id)}>
+                              <X size={14} />
+                            </span>
+                          </div>
+
+                          {expandedTaskIds.has(task.id) && (
+                            <div style={{ paddingLeft: '26px', paddingRight: '10px', width: '100%' }} onClick={(e) => e.stopPropagation()}>
+                              <textarea
+                                className="form-control"
+                                style={{
+                                  width: '100%',
+                                  minHeight: '60px',
+                                  fontSize: '0.78rem',
+                                  padding: '6px 8px',
+                                  backgroundColor: 'rgba(var(--bg-sidebar-rgb), 0.4)',
+                                  border: '1px solid var(--border)',
+                                  color: 'var(--text-main)',
+                                  resize: 'vertical',
+                                  borderRadius: '6px',
+                                  outline: 'none',
+                                  fontFamily: 'inherit'
+                                }}
+                                placeholder="Adicionar detalhes da tarefa..."
+                                defaultValue={task.details || ''}
+                                onBlur={(e) => handleUpdateTaskDetails(task.id, e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter' && e.ctrlKey) {
+                                    e.target.blur();
+                                  }
+                                }}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </Draggable>
+                  ))}
+                  {provided.placeholder}
+                </div>
+              )}
+            </Droppable>
+          </DragDropContext>
+
+          <div 
+            style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '1px', marginTop: '5px', marginBottom: '15px', display: 'flex', justifyContent: 'space-between', cursor: 'pointer' }}
+            onClick={() => setIsCompletedCollapsed(!isCompletedCollapsed)}
+          >
+            <span>CONCLUÍDAS ({completedTasks.length})</span>
+            {isCompletedCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+          </div>
+          
+          {!isCompletedCollapsed && (
+            <div className="task-list" style={{ opacity: 0.6 }}>
+              {completedTasks.map(task => (
+                <div 
+                  key={task.id} 
+                  className="task-item"
+                  style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: '4px', marginBottom: '12px' }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '100%' }}>
+                    <input 
+                      type="checkbox" 
+                      className="task-checkbox" 
+                      checked={true}
+                      onChange={() => handleToggleTask(task.id, true)}
+                    />
+                    {editingTaskId === task.id ? (
+                      <input
+                        autoFocus
+                        type="text"
+                        className="add-task-input"
+                        style={{ flex: 1, padding: '4px 8px', fontSize: '0.85rem' }}
+                        value={editingTaskTitle}
+                        onChange={(e) => setEditingTaskTitle(e.target.value)}
+                        onBlur={() => handleUpdateTaskTitle(task.id)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleUpdateTaskTitle(task.id);
+                          if (e.key === 'Escape') {
+                            setEditingTaskId(null);
+                            setEditingTaskTitle('');
+                          }
+                        }}
+                      />
+                    ) : (
+                      <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
+                        <span 
+                          className="task-title completed" 
+                          style={{ cursor: 'text', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                          onClick={() => {
+                            setEditingTaskId(task.id);
+                            setEditingTaskTitle(task.title);
+                          }}
+                        >
+                          {task.title}
+                        </span>
+                        {settings.enableTags === 'true' && task.tag && (
+                          <span style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', backgroundColor: task.tagColor, color: '#fff', fontWeight: 600, flexShrink: 0, opacity: 0.7 }}>
+                            {task.tag}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    {settings.enableTags === 'true' && (
+                      <span 
+                        style={{ cursor: 'pointer', color: task.tag ? task.tagColor : 'var(--text-muted)', marginLeft: '4px', display: 'flex', alignItems: 'center', position: 'relative' }} 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          const spaceBelow = window.innerHeight - rect.bottom;
+                          setTaskTagMenuDirection(spaceBelow < 200 ? 'up' : 'down');
+                          setEditingTaskTagId(task.id);
+                          setSelectedTaskTag(task.tag || '');
+                          setShowTaskTagMenu(true);
+                        }}
+                        title={task.tag ? `Mudar etiqueta: ${task.tag}` : "Adicionar etiqueta"}
+                      >
+                        <Tag size={12} />
+                        {editingTaskTagId === task.id && showTaskTagMenu && (
+                          <div 
+                            ref={taskTagMenuRef}
+                            style={{ 
+                              position: 'absolute', 
+                              right: '20px', 
+                              ...(taskTagMenuDirection === 'up' ? { bottom: '15px' } : { top: '15px' }),
+                              backgroundColor: 'var(--bg-main)', 
+                              border: '1px solid var(--border)', 
+                              borderRadius: '8px', 
+                              padding: '10px', 
+                              zIndex: 1000, 
+                              width: '200px', 
+                              boxShadow: '0 4px 12px rgba(0,0,0,0.5)', 
+                              cursor: 'default',
+                              textAlign: 'left'
+                            }} 
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <div style={{ fontSize: '0.75rem', fontWeight: 'bold', marginBottom: '8px', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              ETIQUETA DA TAREFA
+                              <span style={{ cursor: 'pointer', padding: '2px 5px' }} onClick={() => { setShowTaskTagMenu(false); setEditingTaskTagId(null); }}>✕</span>
+                            </div>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginBottom: '10px' }}>
+                              <span 
+                                style={{ fontSize: '0.7rem', padding: '3px 8px', borderRadius: '12px', cursor: 'pointer', border: '1px solid var(--border)', backgroundColor: !selectedTaskTag ? 'rgba(255,255,255,0.1)' : 'transparent', color: 'var(--text-main)' }}
+                                onClick={() => handleUpdateTaskTag(task.id, '')}
+                              >Nenhuma</span>
+                              {savedTags.map(tag => (
+                                <span 
+                                  key={tag.name}
+                                  style={{ fontSize: '0.7rem', padding: '2px 6px', borderRadius: '12px', cursor: 'pointer', backgroundColor: tag.color, color: '#fff', opacity: selectedTaskTag === tag.name ? 1 : 0.6 }}
+                                  onClick={() => handleUpdateTaskTag(task.id, tag.name)}
+                                >
+                                  {tag.name}
+                                </span>
+                              ))}
+                            </div>
+                            <input 
+                              type="text" 
+                              className="form-control" 
+                              style={{ fontSize: '0.75rem', padding: '4px', height: '24px', backgroundColor: 'var(--bg-hover)', color: 'var(--text-main)', border: '1px solid var(--border)' }}
+                              placeholder="Nova tag..."
+                              value={newTaskTagInputVal}
+                              onChange={(e) => setNewTaskTagInputVal(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  const cleanVal = newTaskTagInputVal.trim();
+                                  if (cleanVal) {
+                                    handleUpdateTaskTag(task.id, cleanVal);
+                                  }
+                                  setNewTaskTagInputVal('');
+                                  setShowTaskTagMenu(false);
+                                }
+                              }}
+                            />
+                            <div 
+                              onClick={() => { setShowTaskTagMenu(false); setEditingTaskTagId(null); setShowTagManager(true); }}
+                              style={{ 
+                                marginTop: '8px', 
+                                paddingTop: '6px', 
+                                borderTop: '1px solid var(--border)', 
+                                textAlign: 'center', 
+                                fontSize: '0.7rem', 
+                                color: 'var(--primary)', 
+                                cursor: 'pointer',
+                                fontWeight: 'bold',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '4px'
+                              }}
+                            >
+                              <Settings size={10} /> Gerenciar Etiquetas
+                            </div>
+                          </div>
+                        )}
+                      </span>
+                    )}
+                    <span 
+                      style={{ cursor: 'pointer', color: task.details ? 'var(--primary)' : 'var(--text-muted)', marginLeft: '4px', display: 'flex', alignItems: 'center' }} 
+                      onClick={(e) => { e.stopPropagation(); toggleTaskDetails(task.id); }}
+                      title="Detalhes da tarefa"
+                    >
+                      <AlignLeft size={14} />
+                    </span>
+                    <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
+                      {formatCompletedDate(task.completedAt)}
+                    </span>
+                    <span style={{ cursor: 'pointer', color: 'var(--text-muted)', marginLeft: '4px' }} onClick={() => handleDeleteTask(task.id)}>
+                      <X size={14} />
+                    </span>
+                  </div>
+
+                  {expandedTaskIds.has(task.id) && (
+                    <div style={{ paddingLeft: '26px', paddingRight: '10px', width: '100%' }} onClick={(e) => e.stopPropagation()}>
+                      <textarea
+                        className="form-control"
+                        style={{
+                          width: '100%',
+                          minHeight: '60px',
+                          fontSize: '0.78rem',
+                          padding: '6px 8px',
+                          backgroundColor: 'rgba(var(--bg-sidebar-rgb), 0.4)',
+                          border: '1px solid var(--border)',
+                          color: 'var(--text-main)',
+                          resize: 'vertical',
+                          borderRadius: '6px',
+                          outline: 'none',
+                          fontFamily: 'inherit'
+                        }}
+                        placeholder="Adicionar detalhes da tarefa..."
+                        defaultValue={task.details || ''}
+                        onBlur={(e) => handleUpdateTaskDetails(task.id, e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && e.ctrlKey) {
+                            e.target.blur();
+                          }
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        {settings.enableProgressBar === 'true' && (
+          <div style={{ width: '100%', height: '3px', backgroundColor: 'rgba(255,255,255,0.06)', overflow: 'hidden', flexShrink: 0 }}>
+            <div 
+              style={{ 
+                width: `${todaysTasks.length > 0 ? (todaysCompletedCount / todaysTasks.length) * 100 : 0}%`, 
+                height: '100%', 
+                backgroundColor: 'var(--primary)',
+                transition: 'width 0.3s ease'
+              }} 
+            />
+          </div>
+        )}
+        {hasNext && (
+          <div 
+            className={(modKey === 'media' || nextMod === 'media') ? "resize-divider static-divider" : "resize-divider"} 
+            onPointerDown={(modKey === 'media' || nextMod === 'media') ? undefined : (e) => handleDividerPointerDown(`${modKey}-${nextMod}`, e)} 
+            onDoubleClick={(modKey === 'media' || nextMod === 'media') ? undefined : () => handleDividerDoubleClick(`${modKey}-${nextMod}`)} 
+          />
+        )}
+      </div>
+    );
   };
 
   const showTasks = settings.enableTasks !== 'false';
@@ -1001,11 +2463,11 @@ function Widget() {
           className="drag-rail"
           style={{
             position: 'absolute',
-            top: '50px',
-            bottom: '40px',
+            top: '44px',
+            bottom: '28px',
             [edge === 'right' ? 'right' : 'left']: '2px',
             width: '10px',
-            backgroundColor: 'rgba(255, 255, 255, 0.04)',
+            backgroundColor: settings.theme === 'claro' ? 'rgba(0, 0, 0, 0.05)' : 'rgba(255, 255, 255, 0.04)',
             borderRadius: '5px',
             zIndex: 99
           }}
@@ -1018,6 +2480,7 @@ function Widget() {
           style={{ 
             top: yPos === 0 ? 'calc(50vh - 75px)' : yPos, 
             [edge === 'right' ? 'right' : 'left']: '4px',
+            backgroundColor: settings.theme === 'claro' ? 'rgba(0, 0, 0, 0.25)' : 'rgba(255, 255, 255, 0.4)',
             zIndex: 100
           }} 
         />
@@ -1045,698 +2508,52 @@ function Widget() {
           </button>
         </div>
 
-        {settings.enableProgressBar === 'true' && (
-          <div style={{ width: '100%', height: '4px', backgroundColor: 'rgba(255,255,255,0.05)' }}>
-            <div style={{ 
-              height: '100%', 
-              backgroundColor: 'var(--success)', 
-              width: `${todaysTasks.length > 0 ? (todaysCompletedCount / todaysTasks.length) * 100 : 0}%`,
-              transition: 'width 0.3s ease'
-            }} />
-          </div>
-        )}
 
-        {settings.enablePomodoro === 'true' && (
-          <div style={{ padding: '15px', borderBottom: '1px solid var(--border)', display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative' }}>
-            <div style={{ position: 'absolute', top: '10px', left: '15px', fontSize: '0.72rem', fontWeight: 600, letterSpacing: '1px', color: '#ff6b6b', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-                <path d="M12 2c-.5 2.5-2.5 3.5-4 4M12 2c.5 2.5 2.5 3.5 4 4M12 2v5" />
-                <path d="M12 7c-4.5 0-8 3-8 7.5S7.5 22 12 22s8-3 8-7.5S16.5 7 12 7z" />
-              </svg>
-              <span>POMODORO</span>
-            </div>
-            <div style={{ fontSize: '2.2rem', fontWeight: 'bold', fontFamily: 'monospace', color: pomodoroStatus === 'break' ? 'var(--success)' : 'var(--primary)', marginTop: '10px' }}>
-              {pomodoroStatus === 'idle' ? `${String(settings.pomodoroFocus || 25).padStart(2, '0')}:00` : formatPomodoroTime(pomodoroTimeLeft)}
-            </div>
-            <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
-              <button className="btn-primary" style={{ padding: '6px 12px', fontSize: '0.8rem' }} onClick={handlePomodoroToggle}>
-                {pomodoroStatus === 'idle' ? 'Iniciar Foco' : pomodoroStatus === 'running' ? 'Pausar' : pomodoroStatus === 'paused' ? 'Continuar' : 'Fim da Pausa'}
-              </button>
-              {(pomodoroStatus === 'running' || pomodoroStatus === 'paused') && (
-                <button className="btn-secondary" style={{ padding: '6px 12px', fontSize: '0.8rem' }} onClick={handlePomodoroBreak}>
-                  Descanso
-                </button>
-              )}
-              {pomodoroStatus !== 'idle' && (
-                <button className="btn-secondary" style={{ padding: '6px 12px', fontSize: '0.8rem', color: 'var(--danger)' }} onClick={resetPomodoro}>
-                  Parar
-                </button>
-              )}
-            </div>
-          </div>
-        )}
 
-        {showTasks && (
-        <div className="half-section">
-          <div className="fixed-half-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.72rem', fontWeight: 600, letterSpacing: '1px', color: '#4ade80', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <CheckCircle size={12} style={{ flexShrink: 0 }} />
-              <span>TAREFAS</span>
-            </span>
-            <select 
-               style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', fontSize: '0.7rem', outline: 'none', cursor: 'pointer' }}
-               value={taskSortOrder}
-               onChange={(e) => {
-                 const v = e.target.value;
-                 setTaskSortOrder(v);
-                 if (window.api) window.api.updateSetting('taskSortOrder', v);
-               }}
-            >
-               <option value="custom" style={{ color: '#000' }}>Personalizada (Drag)</option>
-               <option value="newest_bottom" style={{ color: '#000' }}>Novas embaixo</option>
-               <option value="newest_top" style={{ color: '#000' }}>Novas em cima</option>
-               <option value="az" style={{ color: '#000' }}>Ordem Alfabética (A-Z)</option>
-               <option value="za" style={{ color: '#000' }}>Ordem Alfabética (Z-A)</option>
-            </select>
-          </div>
+         {/* RENDERIZADOR DINÂMICO DE SEÇÕES REORDENÁVEIS E REDIMENSIONÁVEIS */}
+        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflowY: 'hidden' }} onPointerMove={handleDividerPointerMove} onPointerUp={handleDividerPointerUp}>
+          {(() => {
+            const defaultOrder = ['pomodoro', 'tasks', 'reminders', 'notes'];
+            let modulesOrderArr = (settings.modulesOrder || '').split(',').filter(Boolean);
+            defaultOrder.forEach(mod => {
+              if (!modulesOrderArr.includes(mod)) {
+                modulesOrderArr.push(mod);
+              }
+            });
 
-          <div style={{ padding: '10px 15px 5px 15px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', position: 'relative' }}>
-              <div style={{ flex: 1, position: 'relative' }}>
-                <input 
-                  type="text" 
-                  className="add-task-input" 
-                  placeholder="+ Adicionar tarefa rápida..."
-                  value={newTaskTitle}
-                  onChange={(e) => setNewTaskTitle(e.target.value)}
-                  onKeyDown={handleAddTask}
-                  style={{ paddingRight: settings.enableTags === 'true' ? '30px' : '10px' }}
-                />
-                {settings.enableTags === 'true' && (
-                  <div 
-                    ref={tagMenuRef}
-                    style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', cursor: 'pointer', color: selectedTag ? getTagColorWithSaved(selectedTag) : 'var(--text-muted)' }}
-                    onClick={() => setShowTagMenu(!showTagMenu)}
-                  >
-                    <Tag size={16} />
-                    {showTagMenu && (
-                      <div style={{ position: 'absolute', right: 0, top: '25px', backgroundColor: 'var(--bg-main)', border: '1px solid var(--border)', borderRadius: '8px', padding: '10px', zIndex: 100, width: '200px', boxShadow: '0 4px 12px rgba(0,0,0,0.5)', cursor: 'default' }} onClick={(e) => e.stopPropagation()}>
-                        <div style={{ fontSize: '0.75rem', fontWeight: 'bold', marginBottom: '8px', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          ESCOLHA UMA TAG
-                          <span style={{ cursor: 'pointer', padding: '2px 5px' }} onClick={() => setShowTagMenu(false)}>✕</span>
-                        </div>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginBottom: '10px' }}>
-                          <span 
-                            style={{ fontSize: '0.7rem', padding: '3px 8px', borderRadius: '12px', cursor: 'pointer', border: '1px solid var(--border)', backgroundColor: !selectedTag ? 'rgba(255,255,255,0.1)' : 'transparent' }}
-                            onClick={() => { setSelectedTag(''); setShowTagMenu(false); }}
-                          >Nenhuma</span>
-                          {[...savedTags].sort((a,b) => a.name.localeCompare(b.name)).map(tag => (
-                            editingTag === tag.name ? (
-                              <input
-                                key={`edit-${tag.name}`}
-                                autoFocus
-                                value={editingTagValue}
-                                onChange={e => setEditingTagValue(e.target.value)}
-                                onBlur={handleSaveTagEdit}
-                                onKeyDown={e => e.key === 'Enter' && handleSaveTagEdit()}
-                                style={{ fontSize: '0.7rem', padding: '2px 4px', width: '70px', borderRadius: '12px', border: '1px solid var(--border)', backgroundColor: 'var(--bg-hover)', color: '#fff' }}
-                              />
-                            ) : (
-                              <span 
-                                key={tag.name}
-                                style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.7rem', padding: '2px 6px', borderRadius: '12px', cursor: 'pointer', backgroundColor: tag.color, color: '#fff', opacity: selectedTag === tag.name ? 1 : 0.6 }}
-                                onContextMenu={(e) => { e.preventDefault(); setEditingTag(tag.name); setEditingTagValue(tag.name); }}
-                              >
-                                <span 
-                                  onClick={() => { setSelectedTag(tag.name); setShowTagMenu(false); }}
-                                >
-                                  {tag.name}
-                                </span>
-                                <span style={{ fontSize: '0.6rem', padding: '0 2px', opacity: 0.7 }} onClick={(e) => { e.stopPropagation(); handleDeleteTag(tag.name); }}>✕</span>
-                              </span>
-                            )
-                          ))}
-                        </div>
-                        <input 
-                          type="text" 
-                          className="form-control" 
-                          style={{ fontSize: '0.75rem', padding: '4px', backgroundColor: 'var(--bg-hover)', color: 'var(--text-main)', border: '1px solid var(--border)' }}
-                          placeholder="Nova tag..."
-                          value={newTagInputVal}
-                          onChange={(e) => setNewTagInputVal(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              const cleanVal = newTagInputVal.trim();
-                              if (cleanVal) {
-                                addTagToSaved(cleanVal);
-                                setSelectedTag(cleanVal);
-                              }
-                              setNewTagInputVal('');
-                              setShowTagMenu(false);
-                            }
-                          }}
-                        />
-                        <div 
-                          onClick={() => { setShowTagMenu(false); setShowTagManager(true); }}
-                          style={{ 
-                            marginTop: '8px', 
-                            paddingTop: '6px', 
-                            borderTop: '1px solid var(--border)', 
-                            textAlign: 'center', 
-                            fontSize: '0.7rem', 
-                            color: 'var(--primary)', 
-                            cursor: 'pointer',
-                            fontWeight: 'bold',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: '4px'
-                          }}
-                        >
-                          <Settings size={10} /> Gerenciar Etiquetas
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-          
-          <div className="scrollable-content">
-            <DragDropContext onDragEnd={handleDragEnd}>
-              <Droppable droppableId="pendingTasks">
-                {(provided) => (
-                  <div className="task-list" {...provided.droppableProps} ref={provided.innerRef} style={{ paddingTop: '25px' }}>
-                    {pendingTasks.map((task, index) => (
-                      <Draggable key={task.id.toString()} draggableId={task.id.toString()} index={index}>
-                        {(provided) => (
-                          <div 
-                            className="task-item"
-                            ref={provided.innerRef}
-                            {...provided.draggableProps}
-                            style={{ ...provided.draggableProps.style, display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: '4px', marginBottom: '12px' }}
-                          >
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '100%' }}>
-                              <div {...provided.dragHandleProps} style={{ cursor: 'grab', color: 'var(--text-muted)' }}>
-                                <GripVertical size={14} />
-                              </div>
-                              <input 
-                                type="checkbox" 
-                                className="task-checkbox" 
-                                checked={false}
-                                onChange={() => handleToggleTask(task.id, false)}
-                              />
-                              {editingTaskId === task.id ? (
-                                <input
-                                  autoFocus
-                                  type="text"
-                                  className="add-task-input"
-                                  style={{ flex: 1, padding: '4px 8px', fontSize: '0.85rem' }}
-                                  value={editingTaskTitle}
-                                  onChange={(e) => setEditingTaskTitle(e.target.value)}
-                                  onBlur={() => handleUpdateTaskTitle(task.id)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter') handleUpdateTaskTitle(task.id);
-                                    if (e.key === 'Escape') {
-                                      setEditingTaskId(null);
-                                      setEditingTaskTitle('');
-                                    }
-                                  }}
-                                />
-                              ) : (
-                                <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
-                                  <span 
-                                    className="task-title" 
-                                    style={{ cursor: 'text', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
-                                    onClick={() => {
-                                      setEditingTaskId(task.id);
-                                      setEditingTaskTitle(task.title);
-                                    }}
-                                  >
-                                    {task.title}
-                                  </span>
-                                  {settings.enableTags === 'true' && task.tag && (
-                                    <span style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', backgroundColor: task.tagColor, color: '#fff', fontWeight: 600, flexShrink: 0 }}>
-                                      {task.tag}
-                                    </span>
-                                  )}
-                                </div>
-                              )}
-                              {settings.enableTags === 'true' && (
-                                <span 
-                                  className={`task-tag-trigger ${editingTaskTagId === task.id ? 'active' : ''}`}
-                                  style={{ cursor: 'pointer', color: task.tag ? task.tagColor : 'var(--text-muted)', marginLeft: '4px', display: 'flex', alignItems: 'center', position: 'relative' }} 
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setEditingTaskTagId(task.id);
-                                    setSelectedTaskTag(task.tag || '');
-                                    setShowTaskTagMenu(true);
-                                  }}
-                                  title={task.tag ? `Mudar etiqueta: ${task.tag}` : "Adicionar etiqueta"}
-                                >
-                                  <Tag size={12} />
-                                  {editingTaskTagId === task.id && showTaskTagMenu && (
-                                    <div 
-                                      ref={taskTagMenuRef}
-                                      style={{ 
-                                        position: 'absolute', 
-                                        right: '20px', 
-                                        top: '15px', 
-                                        backgroundColor: 'var(--bg-main)', 
-                                        border: '1px solid var(--border)', 
-                                        borderRadius: '8px', 
-                                        padding: '10px', 
-                                        zIndex: 1000, 
-                                        width: '200px', 
-                                        boxShadow: '0 4px 12px rgba(0,0,0,0.5)', 
-                                        cursor: 'default',
-                                        textAlign: 'left'
-                                      }} 
-                                      onClick={(e) => e.stopPropagation()}
-                                    >
-                                      <div style={{ fontSize: '0.75rem', fontWeight: 'bold', marginBottom: '8px', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        ETIQUETA DA TAREFA
-                                        <span style={{ cursor: 'pointer', padding: '2px 5px' }} onClick={() => { setShowTaskTagMenu(false); setEditingTaskTagId(null); }}>✕</span>
-                                      </div>
-                                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginBottom: '10px' }}>
-                                        <span 
-                                          style={{ fontSize: '0.7rem', padding: '3px 8px', borderRadius: '12px', cursor: 'pointer', border: '1px solid var(--border)', backgroundColor: !selectedTaskTag ? 'rgba(255,255,255,0.1)' : 'transparent', color: 'var(--text-main)' }}
-                                          onClick={() => handleUpdateTaskTag(task.id, '')}
-                                        >Nenhuma</span>
-                                        {savedTags.map(tag => (
-                                          <span 
-                                            key={tag.name}
-                                            style={{ fontSize: '0.7rem', padding: '2px 6px', borderRadius: '12px', cursor: 'pointer', backgroundColor: tag.color, color: '#fff', opacity: selectedTaskTag === tag.name ? 1 : 0.6 }}
-                                            onClick={() => handleUpdateTaskTag(task.id, tag.name)}
-                                          >
-                                            {tag.name}
-                                          </span>
-                                        ))}
-                                      </div>
-                                      <input 
-                                        type="text" 
-                                        className="form-control" 
-                                        style={{ fontSize: '0.75rem', padding: '4px', height: '24px', backgroundColor: 'var(--bg-hover)', color: 'var(--text-main)', border: '1px solid var(--border)' }}
-                                        placeholder="Nova tag..."
-                                        value={newTaskTagInputVal}
-                                        onChange={(e) => setNewTaskTagInputVal(e.target.value)}
-                                        onKeyDown={(e) => {
-                                          if (e.key === 'Enter') {
-                                            const cleanVal = newTaskTagInputVal.trim();
-                                            if (cleanVal) {
-                                              handleUpdateTaskTag(task.id, cleanVal);
-                                            }
-                                            setNewTaskTagInputVal('');
-                                            setShowTaskTagMenu(false);
-                                          }
-                                        }}
-                                      />
-                                      <div 
-                                        onClick={() => { setShowTaskTagMenu(false); setEditingTaskTagId(null); setShowTagManager(true); }}
-                                        style={{ 
-                                          marginTop: '8px', 
-                                          paddingTop: '6px', 
-                                          borderTop: '1px solid var(--border)', 
-                                          textAlign: 'center', 
-                                          fontSize: '0.7rem', 
-                                          color: 'var(--primary)', 
-                                          cursor: 'pointer',
-                                          fontWeight: 'bold',
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          justifyContent: 'center',
-                                          gap: '4px'
-                                        }}
-                                      >
-                                        <Settings size={10} /> Gerenciar Etiquetas
-                                      </div>
-                                    </div>
-                                  )}
-                                </span>
-                              )}
-                              
-                              <span 
-                                style={{ cursor: 'pointer', color: task.details ? 'var(--primary)' : 'var(--text-muted)', marginLeft: '4px', display: 'flex', alignItems: 'center' }} 
-                                onClick={(e) => { e.stopPropagation(); toggleTaskDetails(task.id); }}
-                                title="Detalhes da tarefa"
-                              >
-                                <AlignLeft size={14} />
-                              </span>
+            let activeModules = modulesOrderArr
+              .filter(modKey => {
+                if (modKey === 'tasks') return settings.enableTasks !== 'false';
+                if (modKey === 'reminders') return settings.enableReminders !== 'false';
+                if (modKey === 'pomodoro') return settings.enablePomodoro === 'true';
+                if (modKey === 'notes') return settings.enableNotes === 'true';
+                return false;
+              });
 
-                              <span style={{ cursor: 'pointer', color: 'var(--text-muted)', marginLeft: '4px' }} onClick={() => handleDeleteTask(task.id)}>
-                                <X size={14} />
-                              </span>
-                            </div>
+            if (settings.enableMediaControl !== 'false') {
+              if (settings.mediaPosition === 'top') {
+                activeModules = ['media', ...activeModules];
+              } else {
+                activeModules = [...activeModules, 'media'];
+              }
+            }
 
-                            {expandedTaskIds.has(task.id) && (
-                              <div style={{ paddingLeft: '26px', paddingRight: '10px', width: '100%' }} onClick={(e) => e.stopPropagation()}>
-                                <textarea
-                                  className="form-control"
-                                  style={{
-                                    width: '100%',
-                                    minHeight: '60px',
-                                    fontSize: '0.78rem',
-                                    padding: '6px 8px',
-                                    backgroundColor: 'rgba(var(--bg-sidebar-rgb), 0.4)',
-                                    border: '1px solid var(--border)',
-                                    color: 'var(--text-main)',
-                                    resize: 'vertical',
-                                    borderRadius: '6px',
-                                    outline: 'none',
-                                    fontFamily: 'inherit'
-                                  }}
-                                  placeholder="Adicionar detalhes da tarefa..."
-                                  defaultValue={task.details || ''}
-                                  onBlur={(e) => handleUpdateTaskDetails(task.id, e.target.value)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter' && e.ctrlKey) {
-                                      e.target.blur();
-                                    }
-                                  }}
-                                />
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </Draggable>
-                    ))}
-                    {provided.placeholder}
-                  </div>
-                )}
-              </Droppable>
-            </DragDropContext>
+            return activeModules.map((modKey, idx) => {
+              const currentHeight = sectionHeights[modKey] || 150;
+              const hasNext = idx < activeModules.length - 1;
+              const nextMod = activeModules[idx + 1];
 
-            <div 
-              style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '1px', marginBottom: '15px', display: 'flex', justifyContent: 'space-between', cursor: 'pointer' }}
-              onClick={() => setIsCompletedCollapsed(!isCompletedCollapsed)}
-            >
-              <span>CONCLUÍDAS ({completedTasks.length})</span>
-              {isCompletedCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
-            </div>
-            
-            {!isCompletedCollapsed && (
-              <div className="task-list" style={{ opacity: 0.6 }}>
-                {completedTasks.map(task => (
-                  <div 
-                    key={task.id} 
-                    className="task-item"
-                    style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: '4px', marginBottom: '12px' }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '100%' }}>
-                      <input 
-                        type="checkbox" 
-                        className="task-checkbox" 
-                        checked={true}
-                        onChange={() => handleToggleTask(task.id, true)}
-                      />
-                      {editingTaskId === task.id ? (
-                        <input
-                          autoFocus
-                          type="text"
-                          className="add-task-input"
-                          style={{ flex: 1, padding: '4px 8px', fontSize: '0.85rem' }}
-                          value={editingTaskTitle}
-                          onChange={(e) => setEditingTaskTitle(e.target.value)}
-                          onBlur={() => handleUpdateTaskTitle(task.id)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') handleUpdateTaskTitle(task.id);
-                            if (e.key === 'Escape') {
-                              setEditingTaskId(null);
-                              setEditingTaskTitle('');
-                            }
-                          }}
-                        />
-                      ) : (
-                        <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
-                          <span 
-                            className="task-title completed" 
-                            style={{ cursor: 'text', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
-                            onClick={() => {
-                              setEditingTaskId(task.id);
-                              setEditingTaskTitle(task.title);
-                            }}
-                          >
-                            {task.title}
-                          </span>
-                          {settings.enableTags === 'true' && task.tag && (
-                            <span style={{ fontSize: '0.65rem', padding: '2px 6px', borderRadius: '4px', backgroundColor: task.tagColor, color: '#fff', fontWeight: 600, flexShrink: 0, opacity: 0.7 }}>
-                              {task.tag}
-                            </span>
-                          )}
-                        </div>
-                      )}
-                      {settings.enableTags === 'true' && (
-                        <span 
-                          style={{ cursor: 'pointer', color: task.tag ? task.tagColor : 'var(--text-muted)', marginLeft: '4px', display: 'flex', alignItems: 'center', position: 'relative' }} 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setEditingTaskTagId(task.id);
-                            setSelectedTaskTag(task.tag || '');
-                            setShowTaskTagMenu(true);
-                          }}
-                          title={task.tag ? `Mudar etiqueta: ${task.tag}` : "Adicionar etiqueta"}
-                        >
-                          <Tag size={12} />
-                          {editingTaskTagId === task.id && showTaskTagMenu && (
-                            <div 
-                              ref={taskTagMenuRef}
-                              style={{ 
-                                position: 'absolute', 
-                                right: '20px', 
-                                top: '15px', 
-                                backgroundColor: 'var(--bg-main)', 
-                                border: '1px solid var(--border)', 
-                                borderRadius: '8px', 
-                                padding: '10px', 
-                                zIndex: 1000, 
-                                width: '200px', 
-                                boxShadow: '0 4px 12px rgba(0,0,0,0.5)', 
-                                cursor: 'default',
-                                textAlign: 'left'
-                              }} 
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <div style={{ fontSize: '0.75rem', fontWeight: 'bold', marginBottom: '8px', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                ETIQUETA DA TAREFA
-                                <span style={{ cursor: 'pointer', padding: '2px 5px' }} onClick={() => { setShowTaskTagMenu(false); setEditingTaskTagId(null); }}>✕</span>
-                              </div>
-                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginBottom: '10px' }}>
-                                <span 
-                                  style={{ fontSize: '0.7rem', padding: '3px 8px', borderRadius: '12px', cursor: 'pointer', border: '1px solid var(--border)', backgroundColor: !selectedTaskTag ? 'rgba(255,255,255,0.1)' : 'transparent', color: 'var(--text-main)' }}
-                                  onClick={() => handleUpdateTaskTag(task.id, '')}
-                                >Nenhuma</span>
-                                {savedTags.map(tag => (
-                                  <span 
-                                    key={tag.name}
-                                    style={{ fontSize: '0.7rem', padding: '2px 6px', borderRadius: '12px', cursor: 'pointer', backgroundColor: tag.color, color: '#fff', opacity: selectedTaskTag === tag.name ? 1 : 0.6 }}
-                                    onClick={() => handleUpdateTaskTag(task.id, tag.name)}
-                                  >
-                                    {tag.name}
-                                  </span>
-                                ))}
-                              </div>
-                              <input 
-                                type="text" 
-                                className="form-control" 
-                                style={{ fontSize: '0.75rem', padding: '4px', height: '24px', backgroundColor: 'var(--bg-hover)', color: 'var(--text-main)', border: '1px solid var(--border)' }}
-                                placeholder="Nova tag..."
-                                value={newTaskTagInputVal}
-                                onChange={(e) => setNewTaskTagInputVal(e.target.value)}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') {
-                                    const cleanVal = newTaskTagInputVal.trim();
-                                    if (cleanVal) {
-                                      handleUpdateTaskTag(task.id, cleanVal);
-                                    }
-                                    setNewTaskTagInputVal('');
-                                    setShowTaskTagMenu(false);
-                                  }
-                                }}
-                              />
-                              <div 
-                                onClick={() => { setShowTaskTagMenu(false); setEditingTaskTagId(null); setShowTagManager(true); }}
-                                style={{ 
-                                  marginTop: '8px', 
-                                  paddingTop: '6px', 
-                                  borderTop: '1px solid var(--border)', 
-                                  textAlign: 'center', 
-                                  fontSize: '0.7rem', 
-                                  color: 'var(--primary)', 
-                                  cursor: 'pointer',
-                                  fontWeight: 'bold',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  gap: '4px'
-                                }}
-                              >
-                                <Settings size={10} /> Gerenciar Etiquetas
-                              </div>
-                            </div>
-                          )}
-                        </span>
-                      )}
-                      <span 
-                        style={{ cursor: 'pointer', color: task.details ? 'var(--primary)' : 'var(--text-muted)', marginLeft: '4px', display: 'flex', alignItems: 'center' }} 
-                        onClick={(e) => { e.stopPropagation(); toggleTaskDetails(task.id); }}
-                        title="Detalhes da tarefa"
-                      >
-                        <AlignLeft size={14} />
-                      </span>
-                      <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
-                        {formatCompletedDate(task.completedAt)}
-                      </span>
-                      <span style={{ cursor: 'pointer', color: 'var(--text-muted)', marginLeft: '4px' }} onClick={() => handleDeleteTask(task.id)}>
-                        <X size={14} />
-                      </span>
-                    </div>
-
-                    {expandedTaskIds.has(task.id) && (
-                      <div style={{ paddingLeft: '26px', paddingRight: '10px', width: '100%' }} onClick={(e) => e.stopPropagation()}>
-                        <textarea
-                          className="form-control"
-                          style={{
-                            width: '100%',
-                            minHeight: '60px',
-                            fontSize: '0.78rem',
-                            padding: '6px 8px',
-                            backgroundColor: 'rgba(var(--bg-sidebar-rgb), 0.4)',
-                            border: '1px solid var(--border)',
-                            color: 'var(--text-main)',
-                            resize: 'vertical',
-                            borderRadius: '6px',
-                            outline: 'none',
-                            fontFamily: 'inherit'
-                          }}
-                          placeholder="Adicionar detalhes da tarefa..."
-                          defaultValue={task.details || ''}
-                          onBlur={(e) => handleUpdateTaskDetails(task.id, e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' && e.ctrlKey) {
-                              e.target.blur();
-                            }
-                          }}
-                        />
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+              if (modKey === 'pomodoro') return renderPomodoroModule(currentHeight, hasNext, nextMod, modKey);
+              if (modKey === 'tasks') return renderTasksModule(currentHeight, hasNext, nextMod, modKey);
+              if (modKey === 'reminders') return renderRemindersModule(currentHeight, hasNext, nextMod, modKey);
+              if (modKey === 'notes') return renderNotesModule(currentHeight, hasNext, nextMod, modKey);
+              if (modKey === 'media') return renderMediaModule(currentHeight, hasNext, nextMod, modKey);
+              return null;
+            });
+          })()}
         </div>
-        )}
 
-        {showReminders && (
-        <div className="half-section">
-          <div className="fixed-half-header">
-            <span style={{ fontSize: '0.72rem', fontWeight: 600, letterSpacing: '1px', color: '#ffb84d', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Bell size={12} style={{ flexShrink: 0 }} />
-              <span>LEMBRETES</span>
-            </span>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <a className="section-title-action" onClick={openHistory}>Ver Todos</a>
-            </div>
-          </div>
 
-          <div className="scrollable-content">
-            <div className="form-group">
-              <label className="form-label">MOTIVO</label>
-              <input 
-                type="text" 
-                className="form-control" 
-                placeholder="ex: Ligar para Cliente" 
-                value={newReminderTitle}
-                onChange={e => { setNewReminderTitle(e.target.value); setReminderError(''); }}
-              />
-            </div>
-            <div className="row form-group">
-              <div style={{flex: 1}}>
-                <label className="form-label">DATA</label>
-                <input 
-                  type="date" 
-                  className="form-control"
-                  value={newReminderDate}
-                  onChange={e => { setNewReminderDate(e.target.value); setReminderError(''); }} 
-                />
-              </div>
-              <div style={{flex: 1}}>
-                <label className="form-label">HORA</label>
-                <div style={{ display: 'flex', gap: '5px' }}>
-                  <input 
-                    type="time" 
-                    className="form-control" 
-                    value={newReminderTime} 
-                    onChange={e => { setNewReminderTime(e.target.value); setReminderError(''); }} 
-                    style={{ flex: 1 }}
-                  />
-                </div>
-              </div>
-            </div>
-            
-            <div className="form-group">
-              <label className="form-label">RECORRÊNCIA</label>
-              <select 
-                className="form-control"
-                value={newReminderRecurrence}
-                onChange={e => { setNewReminderRecurrence(e.target.value); setReminderError(''); }}
-              >
-                <option value="none">Não repetir (Único)</option>
-                <option value="daily">Diariamente</option>
-                <option value="weekly">Semanalmente</option>
-                <option value="monthly">Mensalmente</option>
-                <option value="yearly">Anualmente</option>
-              </select>
-            </div>
-            
-            {reminders.some(r => (r.status === 'agendado' || r.status === 'pausado') && r.datetime.startsWith(newReminderDate) && r.datetime.includes('T' + newReminderTime)) && (
-              <div style={{ color: 'var(--danger)', fontSize: '0.7rem', marginBottom: '10px', marginTop: '-5px' }}>
-                ⚠️ Já existe um lembrete nesse horário.
-              </div>
-            )}
-
-            {reminderError && (
-              <div style={{ color: 'var(--danger)', fontSize: '0.7rem', marginBottom: '10px', marginTop: '-5px' }}>
-                ⚠️ {reminderError}
-              </div>
-            )}
-            
-            <button className="btn-primary" onClick={handleAddReminder} style={{ marginBottom: '20px' }}>
-              <Bell size={16} /> Agendar Lembrete
-            </button>
-
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '1px', marginBottom: '15px' }}>
-              PRÓXIMOS
-            </div>
-            {nextReminders.map(r => (
-              <div key={r.id} className="list-item" style={{ padding: '6px 10px', marginBottom: '6px', gap: '8px' }}>
-                <div className="list-item-content">
-                  <h4 style={{fontSize: '0.75rem', color: '#fff', marginBottom: '2px'}}>{r.title}</h4>
-                  <p style={{fontSize: '0.65rem'}}>{new Date(r.datetime).toLocaleString()}</p>
-                </div>
-                <Bell size={12} color="var(--text-muted)" style={{marginLeft: 'auto'}}/>
-              </div>
-            ))}
-          </div>
-        </div>
-        )}
-
-        {settings.enableNotes === 'true' && (
-          <div className="half-section" style={{ flex: 'none', height: '180px' }}>
-            <div className="fixed-half-header">
-              <span style={{ fontSize: '0.72rem', fontWeight: 600, letterSpacing: '1px', color: '#a78bfa', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-                  <path d="M12 20h9" />
-                  <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
-                </svg>
-                <span>NOTAS RÁPIDAS</span>
-              </span>
-            </div>
-            <div className="scrollable-content" style={{ paddingBottom: '10px', overflow: 'hidden' }}>
-              <textarea 
-                className="form-control"
-                style={{ height: '100%', resize: 'none', backgroundColor: 'var(--bg-main)', overflow: quickNote ? 'auto' : 'hidden' }}
-                placeholder="Escreva algo aqui... salvo automaticamente."
-                value={quickNote}
-                onChange={(e) => setQuickNote(e.target.value)}
-                onBlur={() => {
-                  if (window.api) window.api.updateSetting('quickNote', quickNote);
-                }}
-              />
-            </div>
-          </div>
-        )}
 
         {showUpdatePanel ? (
           <div className="updater-footer-panel">
@@ -1777,30 +2594,32 @@ function Widget() {
             )}
           </div>
         ) : (
-          <div className="footer" style={{ padding: '6px 12px', fontSize: '0.6rem', color: 'var(--text-muted)', borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px', flexWrap: 'wrap', minHeight: '28px' }}>
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-              <span>📝 {todaysCompletedCount}/{todaysTasks.length} concluídas</span>
-              <span>🔔 {reminders.filter(r => (r.status === 'agendado' && new Date(r.datetime) >= new Date()) || r.status === 'pausado').length} agendados</span>
-              {reminders.some(r => r.status === 'perdido' || (r.status === 'agendado' && new Date(r.datetime) < new Date())) && (
-                <span 
-                  className="pulse-error" 
-                  style={{ color: 'var(--danger)', cursor: 'pointer', fontWeight: 'bold' }}
-                  onClick={openHistory}
+          <>
+            <div className="footer" style={{ padding: '6px 12px', fontSize: '0.6rem', color: 'var(--text-muted)', borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px', flexWrap: 'wrap', minHeight: '28px' }}>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <span>📝 {todaysCompletedCount}/{todaysTasks.length} concluídas</span>
+                <span>🔔 {reminders.filter(r => (r.status === 'agendado' && new Date(r.datetime) >= new Date()) || r.status === 'pausado').length} agendados</span>
+                {reminders.some(r => r.status === 'perdido' || (r.status === 'agendado' && new Date(r.datetime) < new Date())) && (
+                  <span 
+                    className="pulse-error" 
+                    style={{ color: 'var(--danger)', cursor: 'pointer', fontWeight: 'bold' }}
+                    onClick={openHistory}
+                  >
+                    ⚠️ {reminders.filter(r => r.status === 'perdido' || (r.status === 'agendado' && new Date(r.datetime) < new Date())).length} falhas
+                  </span>
+                )}
+              </div>
+              {updateAvailable && (
+                <button 
+                  className="glow-button" 
+                  onClick={() => setShowUpdatePanel(true)} 
+                  title={`Atualização v${updateVersion} disponível`}
                 >
-                  ⚠️ {reminders.filter(r => r.status === 'perdido' || (r.status === 'agendado' && new Date(r.datetime) < new Date())).length} falhas
-                </span>
+                  <ArrowUp size={12} />
+                </button>
               )}
             </div>
-            {updateAvailable && (
-              <button 
-                className="glow-button" 
-                onClick={() => setShowUpdatePanel(true)} 
-                title={`Atualização v${updateVersion} disponível`}
-              >
-                <ArrowUp size={12} />
-              </button>
-            )}
-          </div>
+          </>
         )}
         </div>
       )}
@@ -1809,6 +2628,8 @@ function Widget() {
         message={confirmConfig.message}
         onConfirm={confirmConfig.onConfirm}
         onCancel={confirmConfig.onCancel}
+        title={confirmConfig.title}
+        isAlert={confirmConfig.isAlert}
       />
       {showTagManager && (
         <div style={{
@@ -2184,6 +3005,294 @@ function Widget() {
                 onClick={() => setShowTagManager(false)}
               >
                 Concluir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showPomodoroPresetsModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.65)',
+          backdropFilter: 'blur(4px)',
+          zIndex: 9999,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '15px'
+        }} onClick={() => setShowPomodoroPresetsModal(false)}>
+          <div style={{
+            backgroundColor: 'var(--bg-main)',
+            border: '1px solid var(--border)',
+            borderRadius: '12px',
+            width: '100%',
+            maxWidth: '320px',
+            maxHeight: '440px',
+            display: 'flex',
+            flexDirection: 'column',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+            overflow: 'hidden',
+          }} onClick={(e) => e.stopPropagation()}>
+            {/* Header */}
+            <div style={{
+              padding: '12px 15px',
+              borderBottom: '1px solid var(--border)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
+              <span style={{ fontSize: '0.8rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-main)' }}>
+                <Clock size={14} style={{ color: 'var(--primary)' }} />
+                Presets de Pomodoro
+              </span>
+              <span 
+                style={{ cursor: 'pointer', padding: '4px 8px', fontSize: '0.9rem', color: 'var(--text-muted)' }} 
+                onClick={() => setShowPomodoroPresetsModal(false)}
+              >
+                ✕
+              </span>
+            </div>
+
+            {/* Criar Preset Section */}
+            <div style={{
+              padding: '10px 15px',
+              borderBottom: '1px solid var(--border)',
+              backgroundColor: 'rgba(255,255,255,0.01)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '6px'
+            }}>
+              <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                <input
+                  type="text"
+                  className="form-control"
+                  style={{
+                    fontSize: '0.75rem',
+                    padding: '4px 8px',
+                    height: '26px',
+                    flex: 2,
+                    backgroundColor: 'var(--bg-hover)',
+                    color: 'var(--text-main)',
+                    border: '1px solid var(--border)',
+                    borderRadius: '6px'
+                  }}
+                  placeholder="Nome do Preset..."
+                  value={newPresetName}
+                  onChange={(e) => setNewPresetName(e.target.value)}
+                />
+                <input
+                  type="number"
+                  className="form-control"
+                  style={{
+                    fontSize: '0.75rem',
+                    padding: '4px 4px',
+                    height: '26px',
+                    flex: 1,
+                    backgroundColor: 'var(--bg-hover)',
+                    color: 'var(--text-main)',
+                    border: '1px solid var(--border)',
+                    borderRadius: '6px',
+                    textAlign: 'center'
+                  }}
+                  min="1"
+                  max="180"
+                  placeholder="Foco"
+                  value={newPresetDuration}
+                  onChange={(e) => setNewPresetDuration(e.target.value)}
+                />
+                <input
+                  type="number"
+                  className="form-control"
+                  style={{
+                    fontSize: '0.75rem',
+                    padding: '4px 4px',
+                    height: '26px',
+                    flex: 1,
+                    backgroundColor: 'var(--bg-hover)',
+                    color: 'var(--text-main)',
+                    border: '1px solid var(--border)',
+                    borderRadius: '6px',
+                    textAlign: 'center'
+                  }}
+                  min="1"
+                  max="60"
+                  placeholder="Desc"
+                  value={newPresetBreakDuration}
+                  onChange={(e) => setNewPresetBreakDuration(e.target.value)}
+                />
+                <button
+                  onClick={handleCreatePomodoroPreset}
+                  style={{
+                    fontSize: '1rem',
+                    height: '26px',
+                    width: '30px',
+                    borderRadius: '6px',
+                    backgroundColor: 'var(--primary)',
+                    color: '#fff',
+                    border: 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontWeight: 'bold',
+                    cursor: 'pointer',
+                    flexShrink: 0
+                  }}
+                >
+                  +
+                </button>
+              </div>
+            </div>
+
+            {/* List */}
+            <DragDropContext onDragEnd={handlePresetsDragEnd}>
+              <Droppable droppableId="pomodoroPresets">
+                {(provided) => (
+                  <div 
+                    className="custom-scrollbar" 
+                    ref={provided.innerRef}
+                    {...provided.droppableProps}
+                    style={{
+                      flex: 1,
+                      overflowY: 'auto',
+                      padding: '12px 15px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '8px'
+                    }}
+                  >
+                    {pomodoroPresets.filter(p => !hideDefaultPresets || !p.id.toString().startsWith('default')).length === 0 ? (
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'center', padding: '30px 0' }}>
+                        Nenhum preset disponível.
+                      </div>
+                    ) : (
+                      pomodoroPresets
+                        .map((preset, idx) => ({ preset, index: idx }))
+                        .filter(item => !hideDefaultPresets || !item.preset.id.toString().startsWith('default'))
+                        .map(({ preset, index }) => (
+                        <Draggable key={preset.id.toString()} draggableId={preset.id.toString()} index={index}>
+                          {(provided) => (
+                            <div 
+                              ref={provided.innerRef}
+                              {...provided.draggableProps}
+                              style={{
+                                ...provided.draggableProps.style,
+                                backgroundColor: 'rgba(255,255,255,0.03)',
+                                border: '1px solid var(--border)',
+                                borderRadius: '8px',
+                                padding: '8px 10px',
+                                transition: 'background-color 0.2s',
+                                userSelect: 'none'
+                              }}
+                            >
+                              {editingPresetId === preset.id ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                  <input
+                                    type="text"
+                                    className="form-control"
+                                    value={editingPresetName}
+                                    onChange={(e) => setEditingPresetName(e.target.value)}
+                                    style={{ fontSize: '0.75rem', padding: '4px 8px', height: '26px', backgroundColor: 'var(--bg-hover)', color: 'var(--text-main)', border: '1px solid var(--border)', borderRadius: '6px' }}
+                                    placeholder="Nome"
+                                    autoFocus
+                                  />
+                                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                                    <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                      <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Foco:</span>
+                                      <input type="number" min="1" max="180" value={editingPresetFocus} onChange={(e) => setEditingPresetFocus(e.target.value)}
+                                        style={{ width: '50px', textAlign: 'center', fontSize: '0.75rem', padding: '3px', backgroundColor: 'var(--bg-hover)', color: 'var(--text-main)', border: '1px solid var(--border)', borderRadius: '4px' }} />
+                                    </div>
+                                    <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                      <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Desc:</span>
+                                      <input type="number" min="1" max="60" value={editingPresetBreak} onChange={(e) => setEditingPresetBreak(e.target.value)}
+                                        style={{ width: '50px', textAlign: 'center', fontSize: '0.75rem', padding: '3px', backgroundColor: 'var(--bg-hover)', color: 'var(--text-main)', border: '1px solid var(--border)', borderRadius: '4px' }} />
+                                    </div>
+                                  </div>
+                                  <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+                                    <button onClick={() => setEditingPresetId(null)} style={{ fontSize: '0.7rem', padding: '3px 8px', backgroundColor: 'transparent', border: '1px solid var(--border)', borderRadius: '4px', color: 'var(--text-muted)', cursor: 'pointer' }}>Cancelar</button>
+                                    <button onClick={() => handleUpdatePomodoroPreset(preset.id)} style={{ fontSize: '0.7rem', padding: '3px 8px', backgroundColor: 'var(--primary)', border: 'none', borderRadius: '4px', color: '#fff', cursor: 'pointer' }}>Salvar</button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                  <div 
+                                    {...provided.dragHandleProps}
+                                    style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'grab', flex: 1 }}
+                                    onClick={() => handleApplyPomodoroPreset(preset)}
+                                  >
+                                    <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>☰</span>
+                                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                      <span style={{ fontSize: '0.78rem', color: '#fff', fontWeight: 600 }}>{preset.name}</span>
+                                      <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>⏱️ {preset.duration}m Foco / {preset.breakDuration || 5}m Descanso</span>
+                                    </div>
+                                  </div>
+                                  <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                                    {!preset.id.toString().startsWith('default') && (
+                                      <button
+                                        style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '4px', fontSize: '0.75rem' }}
+                                        onClick={(e) => { e.stopPropagation(); setEditingPresetId(preset.id); setEditingPresetName(preset.name); setEditingPresetFocus(preset.duration.toString()); setEditingPresetBreak((preset.breakDuration || 5).toString()); }}
+                                        title="Editar preset"
+                                      >✏️</button>
+                                    )}
+                                    {!preset.id.toString().startsWith('default') && (
+                                      <button
+                                        style={{ background: 'transparent', border: 'none', color: 'var(--danger)', cursor: 'pointer', padding: '4px', fontSize: '0.8rem' }}
+                                        onClick={(e) => { e.stopPropagation(); handleDeletePomodoroPreset(preset.id); }}
+                                      >✕</button>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </Draggable>
+                      ))
+                    )}
+                    {provided.placeholder}
+                  </div>
+                )}
+              </Droppable>
+            </DragDropContext>
+
+            {/* Toggle Ocultar Padrões */}
+            <div style={{
+              padding: '6px 15px',
+              borderTop: '1px solid var(--border)',
+              backgroundColor: 'rgba(255,255,255,0.01)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between'
+            }}>
+              <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: 600 }}>Ocultar presets padrões</span>
+              <input 
+                type="checkbox" 
+                checked={hideDefaultPresets} 
+                onChange={(e) => {
+                  const nextVal = e.target.checked;
+                  setHideDefaultPresets(nextVal);
+                  localStorage.setItem('deskwidget_hide_default_presets', nextVal.toString());
+                }} 
+                style={{ width: '14px', height: '14px', cursor: 'pointer', accentColor: 'var(--primary)' }}
+              />
+            </div>
+
+            {/* Footer */}
+            <div style={{
+              padding: '10px 15px',
+              borderTop: '1px solid var(--border)',
+              backgroundColor: 'rgba(0,0,0,0.15)',
+              display: 'flex',
+              justifyContent: 'flex-end'
+            }}>
+              <button 
+                className="btn-primary" 
+                style={{ fontSize: '0.72rem', padding: '5px 12px', width: '100%' }}
+                onClick={() => setShowPomodoroPresetsModal(false)}
+              >
+                Fechar
               </button>
             </div>
           </div>

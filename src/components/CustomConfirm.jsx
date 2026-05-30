@@ -4,7 +4,7 @@ import React from 'react';
  * CustomConfirm - Um modal de confirmação estilizado seguindo a identidade visual do app.
  * Pode ser injetado em qualquer tela e renderizado condicionalmente.
  */
-export default function CustomConfirm({ isOpen, message, onConfirm, onCancel }) {
+export default function CustomConfirm({ isOpen, message, onConfirm, onCancel, title = 'CONFIRMAÇÃO', isAlert = false }) {
   if (!isOpen) return null;
 
   return (
@@ -48,7 +48,7 @@ export default function CustomConfirm({ isOpen, message, onConfirm, onCancel }) 
           color: 'var(--text-muted)'
         }}>
           <img src="./logo-icon.png" alt="" style={{ height: '15px', objectFit: 'contain' }} onError={(e) => e.target.style.display = 'none'} />
-          <span>CONFIRMAÇÃO</span>
+          <span>{title}</span>
         </div>
 
         {/* Content / Message */}
@@ -75,9 +75,11 @@ export default function CustomConfirm({ isOpen, message, onConfirm, onCancel }) 
           justifyContent: 'flex-end',
           backgroundColor: 'rgba(0, 0, 0, 0.1)'
         }}>
-          <button className="btn-secondary" style={{ padding: '8px 16px', fontSize: '0.8rem' }} onClick={onCancel}>
-            Cancelar
-          </button>
+          {!isAlert && onCancel && (
+            <button className="btn-secondary" style={{ padding: '8px 16px', fontSize: '0.8rem' }} onClick={onCancel}>
+              Cancelar
+            </button>
+          )}
           <button className="btn-primary" style={{ padding: '8px 16px', width: 'auto', minWidth: '70px', fontSize: '0.8rem' }} onClick={onConfirm}>
             OK
           </button>

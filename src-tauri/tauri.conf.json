@@ -1,9 +1,9 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "DeskWidget",
+  "productName": "DeskWidget Beta",
   "version": "1.2.3",
-  "mainBinaryName": "DeskWidget",
-  "identifier": "com.coutoapps.deskwidget",
+  "mainBinaryName": "DeskWidgetBeta",
+  "identifier": "com.coutoapps.deskwidget.beta",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:1420",
@@ -14,7 +14,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "DeskWidget",
+        "title": "DeskWidget Beta",
         "width": 8,
         "height": 150,
         "transparent": true,
@@ -24,11 +24,12 @@
         "skipTaskbar": true,
         "resizable": false,
         "fullscreen": false,
-        "visible": false
+        "visible": false,
+        "devtools": false
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self' tauri: http://localhost:1420; connect-src 'self' https://zpawkjebkogozdfhqubp.supabase.co https://api.telegram.org https://api.github.com; script-src 'self' 'unsafe-inline' 'unsafe-eval' http://localhost:1420; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: asset: tauri:;"
     }
   },
   "bundle": {
