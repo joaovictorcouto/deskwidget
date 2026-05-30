@@ -39,3 +39,10 @@ tauri-plugin-window-state = "2"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.61.3", features = ["Media_Control", "Foundation", "Foundation_Collections", "Win32_System_WinRT"] }
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
